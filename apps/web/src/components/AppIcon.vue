@@ -2,6 +2,7 @@
 defineProps<{ name: string; size?: number }>();
 const paths: Record<string, string> = {
   projects: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  storyboard: 'M3 4h18v12H3zM8 20h8M12 16v4M8 8h8M8 12h5',
   workbench: 'M3 5h18v15H3zM3 10h18M9 10v10M7 5l4 5m3-5 4 5',
   jobs: 'M9 5h12M9 12h12M9 19h12M3 4v2m0 5v2m0 5v2',
   export: 'M12 3v12m-4-4 4 4 4-4M4 15v6h16v-6',

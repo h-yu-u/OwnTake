@@ -1,2 +1,5 @@
 export type * from '../../../packages/contracts/src/index.ts';
-export type ViewId = 'projects' | 'workbench' | 'jobs' | 'export' | 'settings';
+export type * from '../../../packages/contracts/src/storyboard.ts';
+export type * from '../../../packages/contracts/src/providers.ts';
+export type * from '../../../packages/contracts/src/calls.ts';
+export type ViewId = 'projects' | 'storyboard' | 'workbench' | 'jobs' | 'export' | 'settings';

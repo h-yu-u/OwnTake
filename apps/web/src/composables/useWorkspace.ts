@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
-import type { AppEvent, AppSettings, Health, Project, ProjectSnapshot, Ratio, TimelineDraft } from '../types.ts';
+import type { AppEvent, AppSettings, Health, Project, ProjectSnapshot, Ratio, Timeline, TimelineDraft } from '../types.ts';
 import { api, ApiRequestError, errorMessage, openSession } from '../lib/api.ts';
 import { emptyTimeline, timelineDraft, timelineProblems } from '../lib/timeline.ts';
 
@@ -197,6 +197,11 @@ export function useWorkspace() {
     if (snapshot.value) snapshot.value = { ...snapshot.value, jobs: snapshot.value.jobs.map(item => item.id === job.id ? job : item) };
     await refreshProject().catch(() => undefined);
   }
+  function adoptTimeline(timeline: Timeline) {
+    if (!snapshot.value || snapshot.value.project.id !== timeline.projectId) return;
+    snapshot.value = { ...snapshot.value, timeline };
+    draft.value = timelineDraft(timeline); savedDraft.value = JSON.stringify(draft.value); draftBaseVersion.value = timeline.version;
+  }
   async function checkHealth(): Promise<void> { health.value = await api.health(); }
   async function saveSettings(input: AppSettings): Promise<void> { settings.value = await api.saveSettings(input); await checkHealth(); }
   function beforeUnload(event: BeforeUnloadEvent) { if (dirty.value) { event.preventDefault(); event.returnValue = ''; } }
@@ -206,5 +211,5 @@ export function useWorkspace() {
   return { projects, snapshot, draft, draftBaseVersion, dirty, health, settings, loading, saving, creating, exporting,
     importing, busy, connection, connectionError, problems, runningCount,
     initialize, selectProject, createProject, importFiles, saveTimeline, exportTimeline, cancelJob,
-    refreshProject, checkHealth, saveSettings };
+    refreshProject, checkHealth, saveSettings, adoptTimeline };
 }

@@ -1,3 +1,4 @@
+import { SCHEMA_VERSION } from '../packages/storage/src/schema.ts';
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -61,7 +62,7 @@ test('SQLite persists projects, immutable assets, timeline versions, jobs and to
     assert.equal(reopened.getSettings().ffmpegPath, '/工具/ffmpeg');
     assert.equal(reopened.getSettings().ffprobePath, 'ffprobe');
     assert.equal(reopened.listRecoverableJobs()[0]?.id, job.id);
-    assert.equal(reopened.schemaVersion, 1);
+    assert.equal(reopened.schemaVersion, SCHEMA_VERSION);
     assert.equal(reopened.db.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1);
     assert.equal(reopened.db.prepare('PRAGMA journal_mode').get()?.journal_mode, 'wal');
     assert.equal(reopened.getArtifact(asset.id).metadata['中文'], '保留 UTF-8');
