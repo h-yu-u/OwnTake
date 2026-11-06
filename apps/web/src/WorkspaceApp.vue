@@ -10,6 +10,8 @@ import { useWorkspace } from './composables/useWorkspace.ts';
 import { useStoryboard } from './composables/useStoryboard.ts';
 import { useGenerations } from './composables/useGenerations.ts';
 import { useStudio } from './composables/useStudio.ts';
+import { useDesktop } from './composables/useDesktop.ts';
+import { desktopApi } from './lib/desktop.ts';
 import { studioApi } from './lib/studioApi.ts';
 import type { RuntimeSettingsInput, SettlementInput } from './lib/studioApi.ts';
 import { generationApi } from './lib/generationApi.ts';
@@ -30,6 +32,10 @@ import ExportView from './views/ExportView.vue';
 import SettingsView from './views/SettingsView.vue';
 import StoryboardView from './views/StoryboardView.vue';
 
+const desktop = useDesktop();
+const { available: desktopAvailable, info: desktopInfo, loading: desktopLoading, error: desktopError } = desktop;
+const openingProjectFolder = ref(false);
+const revealingArtifact = ref<string | null>(null);
 const workspace = useWorkspace();
 const { projects, snapshot, draft, draftBaseVersion, dirty, health, settings, loading, saving, creating, exporting, importing, busy, connection, connectionError, problems, runningCount } = workspace;
 const storyboard = useStoryboard(snapshot);
@@ -201,12 +207,26 @@ async function addStudioAudio(id: string) {
   message.success('配音已加入时间线草稿；请调整入点、音量并保存。');
   await nextTick(); document.getElementById('audio-tracks')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+async function openProjectFolder() {
+  const projectId = snapshot.value?.project.id;
+  if (!desktopAvailable || !projectId || openingProjectFolder.value) return;
+  openingProjectFolder.value = true;
+  try { await perform(() => desktopApi.openProject(projectId)); }
+  finally { openingProjectFolder.value = false; }
+}
+async function revealArtifact(id: string) {
+  if (!desktopAvailable || revealingArtifact.value) return;
+  revealingArtifact.value = id;
+  try { await perform(() => desktopApi.revealArtifact(id)); }
+  finally { revealingArtifact.value = null; }
+}
 </script>
 
 <template>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
   <div class="app-shell">
-    <header class="topbar"><button class="brand" aria-label="OwnTake 项目首页" @click="view = 'projects'"><span class="brand-mark" aria-hidden="true"><span></span></span><span>Own<span class="brand-take">Take</span></span></button><div class="topbar-divider"></div><NSelect class="project-switch" :value="snapshot?.project.id || null" :options="projectOptions" placeholder="选择一个项目" :disabled="disabled || !projects.length" aria-label="当前项目" @update:value="chooseProject" /><div class="topbar-spacer"></div><span class="connection-status" :class="connection" role="status"><span class="status-dot" :class="{ unavailable: connection === 'offline', connecting: connection === 'connecting' }"></span>{{ connectionLabel }}</span><NButton size="small" :disabled="disabled" @click="openCreate"><template #icon><AppIcon name="plus" :size="16" /></template><span class="new-project-label">新建项目</span></NButton></header>
+    <header class="topbar"><button class="brand" aria-label="OwnTake 项目首页" @click="view = 'projects'"><span class="brand-mark" aria-hidden="true"><span></span></span><span>Own<span class="brand-take">Take</span></span></button><div class="topbar-divider"></div><NSelect class="project-switch" :value="snapshot?.project.id || null" :options="projectOptions" placeholder="选择一个项目" :disabled="disabled || !projects.length" aria-label="当前项目" @update:value="chooseProject" /><NButton v-if="desktopAvailable && snapshot" quaternary size="small" class="open-project-folder" :loading="openingProjectFolder" :disabled="disabled || openingProjectFolder" aria-label="打开当前项目目录" @click="openProjectFolder"><template #icon><AppIcon name="folder" :size="17" /></template><span class="desktop-project-label">项目目录</span></NButton><div class="topbar-spacer"></div><span class="connection-status" :class="connection" role="status"><span class="status-dot" :class="{ unavailable: connection === 'offline', connecting: connection === 'connecting' }"></span>{{ connectionLabel }}</span><NButton size="small" :disabled="disabled" @click="openCreate"><template #icon><AppIcon name="plus" :size="16" /></template><span class="new-project-label">新建项目</span></NButton></header>
     <aside class="global-nav"><nav aria-label="主导航" class="nav-items"><button v-for="item in navigation" :key="item.id" class="nav-item" :class="{ 'is-active': view === item.id }" :aria-current="view === item.id ? 'page' : undefined" @click="view = item.id"><span class="nav-icon-wrap"><AppIcon :name="item.icon" :size="21" /><span v-if="item.id === 'jobs' && runningCount" class="nav-count">{{ runningCount }}</span></span><span>{{ item.label }}</span></button></nav><div class="local-mark"><span class="status-dot"></span><span>LOCAL<br />FIRST</span></div></aside>
     <main id="main-content" tabindex="-1">
       <NAlert v-if="connection === 'offline' || connectionError" type="error" :show-icon="false" class="connection-alert"><div class="alert-line"><div><strong>暂时无法连接本地工作台</strong><p>{{ connectionError || '请确认本地服务仍在运行。重连后会从保存的任务记录恢复状态。' }}</p></div><NButton :loading="loading" @click="workspace.initialize">重新连接</NButton></div></NAlert>
@@ -214,13 +234,13 @@ async function addStudioAudio(id: string) {
       <div v-if="!initialized" class="initial-loading"><NSpin size="large" /><p>正在打开你的片场…</p></div>
       <template v-else>
         <ProjectsView v-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
-        <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
+        <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="desktop.refresh" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>
         <StoryboardView v-else-if="view === 'storyboard'" :snapshot="snapshot" :board="board" :shots="shots" :selected-shot="selectedShot" :selected-id="selectedId" :fields="editorFields" :editor-mode="editorMode" :editor-dirty="editorDirty" :editor-conflict="editorConflict" :editor-base-revision="editorBaseRevision" :disabled="disabled" :loading="boardLoading" :error="boardError" :calls="calls" :providers="providers" :reviews="reviews" :review-revision="reviewRevision" @update:fields="editorFields = $event" @create="createShot" @select="chooseShot" @save="perform(() => storyboard.saveShot(), '镜头已保存')" @archive="archiveShot" @move="perform(() => storyboard.moveShot($event.id, $event.direction))" @add-candidate="perform(() => storyboard.addCandidate($event), '素材已加入当前视觉版本的候选')" @select-candidate="selectCandidate" @assets="view = 'workbench'" @timeline="saveBoardTimeline" @refresh="perform(() => storyboard.refresh())" @reload-editor="reloadShot" @create-draft="draftComposer = true" @apply-draft="applyDraft" @renew-draft="renewDraft" @reasoning="openReasoning" @generate="openGeneration" @review="saveHumanReview" @details="projectDetailsDialog = true" @settle="settleCall" />
         <WorkbenchView v-else-if="view === 'workbench'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :version="draftBaseVersion" :preview-revision="previewRevision" :disabled="disabled" :saving="saving" :importing="importing" :problems="problems" @update:draft="draft = $event" @import="importFiles" @restore="restoreAsset" @save="saveTimeline" @export="view = 'export'" @reload="reloadTimeline" @settings="view = 'settings'" />
         <StudioView v-else-if="view === 'studio'" :records="studioOperations" :artifacts="snapshot.artifacts" :providers="providers" :runtimes="runtimes" :disabled="disabled" :error="studioError" @request="openStudio" @settings="view = 'settings'" @refresh="perform(() => studio.refresh())" @cancel="cancelStudio" @retry="perform(() => studio.mutate(() => studioApi.retryIngest($event)), '已请求恢复原回复入库，不会重新调用模型')" @settle="settleStudio" @draft="viewStudioDraft" @audio="addStudioAudio" @candidate="viewGenerationCandidate" />
         <JobsView v-else-if="view === 'jobs'" :jobs="snapshot.jobs" :artifacts="snapshot.artifacts" :cancelling="cancelling" :generations="generationRecords" :providers="providers" :shots="shots" :studio-operations="studioOperations" @studio="view = 'studio'" :generation-error="generationError" :disabled="disabled" @cancel="cancelJob" @refresh="perform(() => workspace.refreshProject())" @workbench="view = 'workbench'" @export="view = 'export'" @refresh-generations="perform(() => generation.refresh())" @candidate="viewGenerationCandidate" @cancel-generation="perform(() => generation.mutate(() => generationApi.cancel($event)), '取消请求已记录，等待确认')" @polling="perform(() => generation.mutate(() => generationApi.polling($event.id, $event.paused)))" @retry-download="perform(() => generation.mutate(() => generationApi.retryDownload($event)), '已请求重试原任务结果下载')" @reconcile="reconcileGeneration" @settle-generation="settleGeneration" />
-        <ExportView v-else-if="view === 'export'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :disabled="disabled" :exporting="exporting" :health="health" :problems="problems" @update:draft="draft = $event" @export="exportTimeline" @jobs="view = 'jobs'" @settings="view = 'settings'" @workbench="view = 'workbench'" />
+        <ExportView v-else-if="view === 'export'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :disabled="disabled" :exporting="exporting" :health="health" :problems="problems" :desktop-available="desktopAvailable" :revealing-artifact="revealingArtifact" @reveal="revealArtifact" @update:draft="draft = $event" @export="exportTimeline" @jobs="view = 'jobs'" @settings="view = 'settings'" @workbench="view = 'workbench'" />
       </template>
     </main>
     <ProjectDialog v-model:show="projectDialog" :busy="creating" @create="createProject" />

@@ -5,6 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import type { AppEvent, AppSettings, Artifact, Project, ProjectSnapshot, Ratio, Timeline, TimelineDraft } from '../../contracts/src/index.ts';
 import { AppError, invariant } from '../../contracts/src/errors.ts';
 import { createBackup } from './backup.ts';
+import { backupBeforeMigration } from './migration-backup.ts';
+import type { MigrationSnapshot } from './migration-backup.ts';
 import { artifactFromRow, eventFromRow, projectFromRow, timelineFromRow } from './mapping.ts';
 import { JobRepository } from './jobs.ts';
 import type { CreateJobInput, JobPatch } from './jobs.ts';
@@ -23,6 +25,7 @@ export class Store {
   readonly projectsDir: string;
   readonly databasePath: string;
   readonly schemaVersion = SCHEMA_VERSION;
+  readonly migrationSnapshot: MigrationSnapshot | null;
   private readonly jobs: JobRepository;
   private depth = 0;
   private savepoint = 0;
@@ -35,8 +38,10 @@ export class Store {
     this.projectsDir = realpathSync(options.projectsDir);
     this.databasePath = resolve(this.dataDir, 'app.sqlite');
     this.db = new DatabaseSync(this.databasePath);
-    try { initializeSchema(this.db); chmodSync(this.databasePath, 0o600); }
-    catch (error) { this.db.close(); throw error; }
+    try {
+      this.migrationSnapshot = backupBeforeMigration({ db: this.db, dataDir: this.dataDir, projectsDir: this.projectsDir, targetSchemaVersion: SCHEMA_VERSION });
+      initializeSchema(this.db); chmodSync(this.databasePath, 0o600);
+    } catch (error) { try { this.db.close(); } catch { /* Preserve the initialization error. */ } throw error; }
     this.jobs = new JobRepository(this);
   }
 

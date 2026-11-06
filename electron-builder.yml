@@ -1,0 +1,25 @@
+appId: dev.owntake.desktop
+productName: OwnTake
+asar: true
+directories:
+  output: release
+  buildResources: apps/desktop/dist
+files:
+  - apps/desktop/dist/**/*
+  - apps/web/dist/**/*
+  - package.json
+  - '!node_modules/**/*'
+npmRebuild: false
+mac:
+  category: public.app-category.video
+  icon: apps/desktop/dist/icon.png
+  target:
+    - target: zip
+  identity: null
+  hardenedRuntime: true
+linux:
+  icon: apps/desktop/dist/icon.png
+  category: AudioVideo
+  target:
+    - target: AppImage
+artifactName: '${productName}-${version}-${os}-${arch}.${ext}'

@@ -7,6 +7,7 @@ import { isAbsoluteExecutable } from '../lib/studio.ts';
 import { studioApi } from '../lib/studioApi.ts';
 import type { RuntimeSettingsInput } from '../lib/studioApi.ts';
 import AppIcon from './AppIcon.vue';
+import NativePathButton from './NativePathButton.vue';
 
 const props = defineProps<{ runtimes: LocalRuntimeProfile[]; disabled: boolean }>();
 const emit = defineEmits<{ save: [input: { id: string | null; profile: RuntimeSettingsInput }]; refresh: [] }>();
@@ -55,7 +56,7 @@ function inspection(profile: LocalRuntimeProfile): LocalRuntimeInspection | unde
       <NForm @submit.prevent="save">
         <NFormItem label="名称"><NInput :input-props="{ 'aria-label': '名称' }" v-model:value="form.label" :maxlength="120" :disabled="disabled" placeholder="例如 我的本机草稿助手" /></NFormItem>
         <NFormItem label="CLI 类型"><NSelect aria-label="CLI 类型" :input-props="{ 'aria-label': 'CLI 类型' }" v-model:value="form.kind" :disabled="disabled" :options="[{ label: 'Codex CLI', value: 'codex-cli' }, { label: 'Claude Code', value: 'claude-code' }]" /></NFormItem>
-        <NFormItem label="可执行文件绝对路径"><NInput :input-props="{ 'aria-label': '可执行文件绝对路径' }" v-model:value="form.binaryPath" :disabled="disabled" placeholder="填写本机真实安装路径，不接受命令或参数" /></NFormItem>
+        <NFormItem label="可执行文件绝对路径"><div class="native-path-field"><NInput :input-props="{ 'aria-label': '可执行文件绝对路径' }" v-model:value="form.binaryPath" :disabled="disabled" placeholder="填写本机真实安装路径，不接受命令或参数" /><NativePathButton kind="runtime" label="选择本机 CLI 可执行文件" :disabled="disabled" @select="form.binaryPath = $event" /></div></NFormItem>
         <NFormItem label="模型 ID"><NInput :input-props="{ 'aria-label': '模型 ID' }" v-model:value="form.model" :maxlength="200" :disabled="disabled" placeholder="填写该 CLI 与账号实际可用的模型" /></NFormItem>
         <NFormItem label="一次执行超时（秒）"><NInputNumber :input-props="{ 'aria-label': '一次执行超时（秒）' }" :value="form.timeoutMs / 1000" :min="0.1" :max="600" :precision="1" :disabled="disabled" @update:value="value => { if (value !== null) form.timeoutMs = Math.round(value * 1000); }" /></NFormItem>
         <NCheckbox v-model:checked="form.enabled" :disabled="disabled" class="reasoning-acknowledgement">启用此本机 CLI 作为草稿工具</NCheckbox>
