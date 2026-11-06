@@ -9,6 +9,8 @@ const paths: Record<string, string> = {
   review: 'M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12zm7 0a3 3 0 1 0 6 0 3 3 0 0 0-6 0',
   jobs: 'M9 5h12M9 12h12M9 19h12M3 4v2m0 5v2m0 5v2',
   export: 'M12 3v12m-4-4 4 4 4-4M4 15v6h16v-6',
+  folder: 'M3 7V5h6l2 2h10v13H3z',
+  desktop: 'M3 4h18v13H3zM8 21h8m-4-4v4',
   settings: 'M4 5h16M4 12h16M4 19h16M8 3v4m8 3v4m-6 3v4',
   plus: 'M12 5v14M5 12h14',
   arrow: 'M4 12h16m-6-6 6 6-6 6',

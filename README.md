@@ -6,7 +6,7 @@ OwnTake 是个人电脑上的 AI 短片工作台。Vue 界面、本地 Node 服�
 
 ## 本地启动
 
-要求 **Node.js 24.12+（24.x）**、npm、FFmpeg 与 ffprobe。macOS 可以使用 Homebrew 安装 FFmpeg；在设置页可以填写工具的绝对路径。
+要求 **Node.js 24.12+（24.x）**、npm、FFmpeg 与 ffprobe。macOS 的字幕导出需要包含 libass 的 FFmpeg；可安装 [Homebrew ffmpeg-full](https://formulae.brew.sh/formula/ffmpeg-full)，并在设置页选择其 `bin/ffmpeg`、`bin/ffprobe` 绝对路径及中文字体。
 
 ```bash
 npm ci
@@ -23,6 +23,16 @@ npm run dev
 ```
 
 打开 <http://127.0.0.1:5173>。前端代理请求到本地服务；无需配置数据库服务或 Docker。
+
+## 桌面启动与打包
+
+复用同一套数据与功能，也可以从桌面窗口使用：
+
+```bash
+npm run desktop
+```
+
+在 Mac 上执行 `npm run package:mac` 生成 `release/` 中的个人自用 ZIP，解压即可运行内置 Node 的应用。FFmpeg、字体和可选 CLI 仍由本机配置。关闭窗口继续后台运行；应用菜单中的退出会协调停止任务。相同数据目录已有 Web 服务时，先停止该服务再启动桌面入口。桌面部署、升级快照及验收边界见 [P5 说明](docs/validation/p5.md)。
 
 ## 数据与配置
 

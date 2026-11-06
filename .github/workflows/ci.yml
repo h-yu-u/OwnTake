@@ -15,6 +15,63 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk xvfb
       - run: npm ci
       - run: npm run check
+      - run: xvfb-run --auto-servernum npm run smoke:desktop
+        env:
+          OWNTAKE_DESKTOP_TEST_NO_SANDBOX: '1'
+          OWNTAKE_DESKTOP_SCREENSHOT: test-results/desktop-linux.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-linux-preview
+          path: test-results/*.png
+          if-no-files-found: ignore
+  mac-desktop:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install FFmpeg with subtitle support
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+      - name: Prepare a pinned CJK font for media tests
+        run: |
+          font_path="$RUNNER_TEMP/NotoSansCJKsc-Regular.otf"
+          curl --fail --location --retry 2 --max-time 120 --output "$font_path" https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
+          echo "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b  $font_path" | shasum -a 256 -c -
+          echo "OWNTAKE_TEST_FONT=$font_path" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run check
+      - run: npm run smoke:desktop
+        env:
+          OWNTAKE_DESKTOP_SCREENSHOT: test-results/desktop-mac.png
+      - name: Build unsigned local macOS app
+        run: npx electron-builder --mac zip
+      - name: Check the packaged app
+        run: |
+          desktop_binary="release/mac/OwnTake.app/Contents/MacOS/OwnTake"
+          if [ "$(uname -m)" = "arm64" ]; then
+            desktop_binary="release/mac-arm64/OwnTake.app/Contents/MacOS/OwnTake"
+          fi
+          OWNTAKE_DESKTOP_EXECUTABLE="$desktop_binary" npm run smoke:desktop
+        env:
+          OWNTAKE_DESKTOP_SCREENSHOT: test-results/desktop-mac-packaged.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-mac-preview
+          path: test-results/*.png
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OwnTake-mac-${{ runner.arch }}
+          path: release/OwnTake-*.zip
+          if-no-files-found: error
+          retention-days: 7

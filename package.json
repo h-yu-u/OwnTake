@@ -3,17 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.12.0 <25" },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:server": "node --watch apps/server/src/main.ts",
     "dev:web": "vite --config apps/web/vite.config.ts",
     "build": "vite build --config apps/web/vite.config.ts",
     "start": "node apps/server/src/main.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.server.json && vue-tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.server.json && vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.desktop.json",
     "test": "node scripts/test.mjs",
-    "check": "npm run typecheck && npm test && npm run build",
-    "backup": "node scripts/backup.ts"
+    "check": "npm run typecheck && npm test && npm run build:desktop",
+    "backup": "node scripts/backup.ts",
+    "build:desktop": "npm run build && node scripts/build-desktop.mjs",
+    "desktop": "npm run build:desktop && electron .",
+    "package:desktop": "npm run build:desktop && electron-builder",
+    "package:mac": "npm run build:desktop && electron-builder --mac zip",
+    "smoke:desktop": "node scripts/smoke-desktop.mjs"
   },
   "dependencies": {
     "naive-ui": "2.45.3",
@@ -22,8 +29,15 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "6.0.10",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "playwright-core": "1.65.0",
     "typescript": "5.9.3",
     "vite": "8.3.6",
     "vue-tsc": "3.3.14"
-  }
+  },
+  "main": "apps/desktop/dist/main.mjs",
+  "description": "OwnTake — a local personal AI film workbench",
+  "author": "OwnTake contributors"
 }
