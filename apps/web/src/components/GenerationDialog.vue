@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { NAlert, NButton, NCheckbox, NForm, NFormItem, NInput, NInputNumber, NModal, NSelect, NTag } from 'naive-ui';
-import type { Artifact, CallRecord, GenerationPlan, GenerationRecord, PlanValidationResult, Project, ProviderSummary, Reservation, Shot } from '../types.ts';
+import type { Artifact, CallRecord, StudioOperation, GenerationPlan, GenerationRecord, PlanValidationResult, Project, ProviderSummary, Reservation, Shot } from '../types.ts';
 import { artifactUrl, errorMessage } from '../lib/api.ts';
 import { generationApi } from '../lib/generationApi.ts';
 import type { GenerationRequest } from '../lib/generationApi.ts';
@@ -10,7 +10,7 @@ import { initialGenerationPlan, inputModeOptions, ratioOptions } from '../lib/ge
 import AppIcon from './AppIcon.vue';
 import BudgetReservation from './BudgetReservation.vue';
 
-const props = defineProps<{ show: boolean; shot: Shot; project: Project; providers: ProviderSummary[]; artifacts: Artifact[]; calls: CallRecord[]; generations: GenerationRecord[]; disabled: boolean }>();
+const props = defineProps<{ show: boolean; shot: Shot; project: Project; providers: ProviderSummary[]; artifacts: Artifact[]; calls: CallRecord[]; generations: GenerationRecord[]; studioOperations: StudioOperation[]; disabled: boolean }>();
 const emit = defineEmits<{ 'update:show': [value: boolean]; submit: [input: { shotId: string; request: GenerationRequest }]; settings: [] }>();
 const plan = ref<GenerationPlan>(initialGenerationPlan(props.shot, props.project.ratio));
 const providerId = ref<string | null>(null);
@@ -26,8 +26,8 @@ const provider = computed(() => props.providers.find(item => item.id === provide
 const providerOptions = computed(() => props.providers.filter(item => item.kind === (plan.value.kind === 'image' ? 'openai-images' : 'ark-video')).map(item => ({ label: `${item.label} · ${item.model}`, value: item.id })));
 const referenceOptions = computed(() => props.artifacts.filter(artifact => artifact.kind === 'image').map(artifact => ({ label: artifact.name, value: artifact.id })));
 const artifactMap = computed(() => new Map(props.artifacts.map(artifact => [artifact.id, artifact])));
-const unknownCount = computed(() => unknownReservations([...props.calls, ...props.generations]));
-const used = computed(() => budgetUsed([...props.calls, ...props.generations], reservation.value.currency));
+const unknownCount = computed(() => unknownReservations([...props.calls, ...props.generations, ...props.studioOperations]));
+const used = computed(() => budgetUsed([...props.calls, ...props.generations, ...props.studioOperations], reservation.value.currency));
 const shotChanged = computed(() => shotRevision.value !== props.shot.revision);
 const fingerprint = computed(() => JSON.stringify({ providerId: providerId.value, providerRevision: provider.value?.updatedAt, shotRevision: shotRevision.value, plan: plan.value }));
 const canSubmit = computed(() => !shotChanged.value && validation.value?.status === 'valid' && provider.value && acknowledged.value && (!unknownCount.value || independentAcknowledged.value) && reservationValid(reservation.value, used.value));
@@ -87,7 +87,7 @@ function submit() {
       <NAlert v-if="validationError" type="error" :show-icon="false" class="draft-alert">{{ validationError }}</NAlert>
       <NAlert v-if="validation?.status === 'needs_replan'" type="warning" :show-icon="false" class="draft-alert"><strong>需要调整计划后再提交</strong><ul class="validation-issues"><li v-for="issue in validation.issues" :key="`${issue.code}:${issue.field}`">{{ issue.message }}</li></ul></NAlert>
       <div v-if="validation?.status === 'valid'" class="validated-target"><strong>已校验的实际目标</strong><span>{{ validation.compiled.model }}</span><code>{{ validation.compiled.baseUrl }}</code><p>通过本地能力校验不代表已验证真实服务、计费或画面质量。</p></div>
-      <BudgetReservation v-model="reservation" :calls="calls" :generations="generations" :disabled="disabled || validating" />
+      <BudgetReservation v-model="reservation" :calls="calls" :generations="generations" :studio-operations="studioOperations" :disabled="disabled || validating" />
       <NCheckbox v-if="unknownCount" v-model:checked="independentAcknowledged" class="reasoning-acknowledgement" :disabled="disabled || validating">我确认这是独立新请求，旧的未知调用继续保留并待核对。</NCheckbox>
       <NCheckbox v-model:checked="acknowledged" class="reasoning-acknowledgement" :disabled="disabled || validating || validation?.status !== 'valid'">我已核对输入、所发图片、模型目标和费用预留，确认提交一次生成。</NCheckbox>
       <div class="dialog-actions"><NButton :disabled="disabled || validating" @click="emit('update:show', false)">继续编辑</NButton><NButton type="primary" attr-type="submit" :loading="disabled" :disabled="disabled || validating || !canSubmit">提交生成候选</NButton></div>

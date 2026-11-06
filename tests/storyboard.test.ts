@@ -233,7 +233,9 @@ test('version 1 data and backups upgrade transactionally to the current schema w
   const media = asset(store, project.id);
   const job = store.createJob({ projectId: project.id, type: 'render', payload: {}, dedupeKey: 'legacy-job' });
   // Recreate the exact P1 table set, retaining actual P1 records, constraints and files.
+  store.db.exec('DROP TABLE studio_receipts; DROP TABLE studio_frames; DROP TABLE studio_operations; DROP TABLE runtime_profiles; DROP TABLE reviews; DROP TABLE generations;');
   store.db.exec('DROP TABLE storyboard_drafts; DROP TABLE candidates; DROP TABLE shot_revisions; DROP TABLE shots; DROP TABLE boards; DROP TABLE provider_calls; DROP TABLE provider_profiles; DROP INDEX artifacts_identity_project; PRAGMA user_version=1;');
+  assert.deepEqual(store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row => row.name), ['artifacts', 'events', 'jobs', 'projects', 'settings', 'timelines']);
   const backup = join(root, 'legacy-backup');
   const manifest = await createBackup({ db: store.db, dataDir: store.dataDir, projectsDir: store.projectsDir, schemaVersion: 1 }, backup);
   assert.equal(manifest.schemaVersion, 1);

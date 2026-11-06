@@ -173,9 +173,13 @@ test('legacy version 1 and version 2 manifests without stagedArtifacts still res
   for (const version of [1, 2]) {
     await t.test(`schema ${version} to schema ${SCHEMA_VERSION}`, async sub => {
       const f = await fixture(sub);
-      f.store.db.exec('DROP TABLE reviews; DROP TABLE generations;');
+      // Remove newer child tables before their parents; changing user_version alone
+      // would leave a v4 database falsely labelled as a legacy backup.
+      f.store.db.exec('DROP TABLE studio_receipts; DROP TABLE studio_frames; DROP TABLE studio_operations; DROP TABLE runtime_profiles; DROP TABLE reviews; DROP TABLE generations;');
       if (version === 1) f.store.db.exec('DROP TABLE storyboard_drafts; DROP TABLE candidates; DROP TABLE shot_revisions; DROP TABLE shots; DROP TABLE boards; DROP TABLE provider_calls; DROP TABLE provider_profiles; DROP INDEX artifacts_identity_project;');
       f.store.db.exec(`PRAGMA user_version=${version}`);
+      const expectedTables = ['artifacts', 'events', 'jobs', 'projects', 'settings', 'timelines', ...(version === 2 ? ['boards', 'candidates', 'provider_calls', 'provider_profiles', 'shot_revisions', 'shots', 'storyboard_drafts'] : [])].sort();
+      assert.deepEqual(f.store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row => row.name), expectedTables);
       const backup = join(f.root, 'legacy-backup');
       const manifest = await createBackup({ db: f.store.db, dataDir: f.store.dataDir, projectsDir: f.store.projectsDir, schemaVersion: version }, backup);
       assert.equal(manifest.stagedArtifacts, undefined);
@@ -186,6 +190,8 @@ test('legacy version 1 and version 2 manifests without stagedArtifacts still res
         assert.equal(restored.schemaVersion, SCHEMA_VERSION);
         assert.equal(restored.getProject(f.project.id).name, f.project.name);
         assert.equal(restored.db.prepare('SELECT COUNT(*) AS count FROM generations').get()?.count, 0);
+        assert.equal(restored.db.prepare('SELECT COUNT(*) AS count FROM studio_operations').get()?.count, 0);
+        assert.equal(restored.db.prepare('SELECT COUNT(*) AS count FROM studio_receipts').get()?.count, 0);
         assert.equal(new StoryboardStore(restored).snapshot(f.project.id).shots.length, version === 1 ? 0 : 1);
       } finally { restored.close(); }
     });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { NAlert, NButton, NSelect, NSpin, useDialog, useMessage } from 'naive-ui';
-import type { AppSettings, DraftOperation, Ratio, Reservation, ViewId } from './types.ts';
+import type { AppSettings, DraftOperation, Ratio, Reservation, StudioCreateRequest, StudioKind, ViewId } from './types.ts';
 import { api, errorMessage } from './lib/api.ts';
 import { renewDraftOperations } from './lib/storyboard.ts';
 import { storyboardApi } from './lib/storyboardApi.ts';
@@ -9,6 +9,9 @@ import type { ProviderInput } from './lib/providerApi.ts';
 import { useWorkspace } from './composables/useWorkspace.ts';
 import { useStoryboard } from './composables/useStoryboard.ts';
 import { useGenerations } from './composables/useGenerations.ts';
+import { useStudio } from './composables/useStudio.ts';
+import { studioApi } from './lib/studioApi.ts';
+import type { RuntimeSettingsInput, SettlementInput } from './lib/studioApi.ts';
 import { generationApi } from './lib/generationApi.ts';
 import type { GenerationRequest, HumanReviewInput } from './lib/generationApi.ts';
 import AppIcon from './components/AppIcon.vue';
@@ -18,6 +21,8 @@ import ProjectDetailsDialog from './components/ProjectDetailsDialog.vue';
 import DraftComposer from './components/DraftComposer.vue';
 import ReasoningDialog from './components/ReasoningDialog.vue';
 import GenerationDialog from './components/GenerationDialog.vue';
+import StudioRequestDialog from './components/StudioRequestDialog.vue';
+import StudioView from './views/StudioView.vue';
 import ProjectsView from './views/ProjectsView.vue';
 import WorkbenchView from './views/WorkbenchView.vue';
 import JobsView from './views/JobsView.vue';
@@ -31,9 +36,11 @@ const storyboard = useStoryboard(snapshot);
 const { board, calls, providers, loading: boardLoading, mutating: boardBusy, loadError: boardError, editorMode, selectedId, selectedShot, fields: editorFields, shots, editorDirty, editorBaseRevision, editorConflict } = storyboard;
 const generation = useGenerations(snapshot);
 const { records: generationRecords, reviews, busy: generationBusy, error: generationError } = generation;
+const studio = useStudio(snapshot);
+const { operations: studioOperations, runtimes, busy: studioBusy, error: studioError } = studio;
 const message = useMessage();
 const dialog = useDialog();
-const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
+const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'studio', label: '创作工具', icon: 'studio' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
 const rememberedView = window.location.hash.slice(1);
 const view = ref<ViewId>(navigation.some(item => item.id === rememberedView) ? rememberedView as ViewId : 'projects');
 const projectDialog = ref(false);
@@ -41,6 +48,8 @@ const projectDetailsDialog = ref(false);
 const draftComposer = ref(false);
 const reasoningDialog = ref(false);
 const generationDialog = ref(false);
+const studioDialog = ref(false);
+const studioKind = ref<StudioKind>('tts');
 const generationShotId = ref<string | null>(null);
 const generationShot = computed(() => board.value?.shots.find(shot => shot.id === generationShotId.value) || null);
 const reviewRevision = ref(0);
@@ -53,13 +62,13 @@ const checkingHealth = ref(false);
 const restoring = ref(false);
 const previewRevision = ref(0);
 const cancelling = ref<string[]>([]);
-const disabled = computed(() => busy.value || boardBusy.value || generationBusy.value || savingProject.value || creatingBoardTimeline.value || restoring.value || savingSettings.value || connection.value === 'offline');
+const disabled = computed(() => busy.value || boardBusy.value || generationBusy.value || studioBusy.value || savingProject.value || creatingBoardTimeline.value || restoring.value || savingSettings.value || connection.value === 'offline');
 const projectOptions = computed(() => projects.value.map(project => ({ label: project.name, value: project.id })));
 const connectionLabel = computed(() => connection.value === 'offline' ? '本地服务离线' : connection.value === 'connecting' ? '正在连接' : health.value?.status === 'degraded' ? '媒体工具待设置' : '本地工作台已就绪');
 
 watch(view, next => { window.history.replaceState(null, '', `#${next}`); });
 watch(() => snapshot.value?.project.name, name => { document.title = name ? `${name} · OwnTake` : 'OwnTake · 自己的片场'; });
-onMounted(async () => { await workspace.initialize(); await perform(() => storyboard.loadProviders()); initialized.value = true; });
+onMounted(async () => { await workspace.initialize(); await perform(async () => { await Promise.all([storyboard.loadProviders(), studio.loadRuntimes()]); }); initialized.value = true; });
 
 async function perform(action: () => Promise<unknown>, success?: string): Promise<boolean> {
   actionError.value = '';
@@ -137,7 +146,7 @@ function saveBoardTimeline() {
 async function createDraft(operations: DraftOperation[]) { if (await perform(() => storyboard.createDraft(operations), '草稿已保存，等待逐项审阅')) { draftComposer.value = false; reviewRevision.value++; } }
 async function renewDraft(id: string) { const existing = board.value?.drafts.find(item => item.id === id); if (existing) await createDraft(renewDraftOperations(existing)); }
 async function applyDraft(input: { id: string; acceptedOperationIds: string[] }) { await perform(() => storyboard.applyDraft(input.id, input.acceptedOperationIds), `已应用 ${input.acceptedOperationIds.length} 项变更`); }
-async function saveProvider(input: { id: string | null; profile: ProviderInput }) { await perform(() => storyboard.saveProvider(input.id, input.profile), '连接已保存，尚未发起推理请求'); }
+async function saveProvider(input: { id: string | null; profile: ProviderInput }) { await perform(() => storyboard.saveProvider(input.id, input.profile), '连接已保存，尚未发起模型请求'); }
 function openReasoning() {
   if (!snapshot.value?.project.brief.trim()) { message.info('先写下创作简报，再让模型提出分镜建议。'); projectDetailsDialog.value = true; return; }
   reasoningDialog.value = true;
@@ -164,6 +173,34 @@ function viewGenerationCandidate(id: string) {
 }
 async function reconcileGeneration(input: { id: string; remoteTaskId: string; note: string }) { await perform(() => generation.mutate(() => generationApi.reconcile(input.id, input.remoteTaskId, input.note)), '已关联原任务，后续只查询原任务状态'); }
 async function settleGeneration(input: { id: string; actualAmount: number; currency: Reservation['currency']; note: string }) { await perform(() => generation.mutate(() => generationApi.settle(input.id, { actualAmount: input.actualAmount, currency: input.currency, note: input.note })), '生成费用核对已记录'); }
+
+async function saveRuntime(input: { id: string | null; profile: RuntimeSettingsInput }) { await perform(() => studio.saveRuntime(input.id, input.profile), '本机 CLI 设置已保存，尚未调用模型'); }
+async function openStudio(kind: StudioKind) {
+  if (!await perform(async () => { await Promise.all([storyboard.loadProviders(), studio.loadRuntimes(), storyboard.refresh(), generation.refresh(), studio.refresh()]); })) return;
+  studioKind.value = kind; studioDialog.value = true;
+}
+async function submitStudio(input: StudioCreateRequest) {
+  if (await perform(() => studio.submit(input), '创作操作已登记，结果会保存在操作台账')) { studioDialog.value = false; view.value = 'studio'; }
+}
+async function settleStudio(input: SettlementInput) { await perform(() => studio.mutate(() => studioApi.settle(input)), '实际费用核对已记录'); }
+function cancelStudio(id: string) {
+  dialog.warning({ title: '请求停止本地处理？', content: '如果外部服务或 CLI 已收到请求，它仍可能继续处理并产生费用。停止后将保留操作记录与费用预留。', positiveText: '请求停止', negativeText: '继续处理', onPositiveClick: () => perform(() => studio.mutate(() => studioApi.cancel(id)), '停止请求已记录；外部处理状态以操作台账为准') });
+}
+async function viewStudioDraft(id: string) {
+  if (!await perform(() => storyboard.refresh())) return;
+  if (!board.value?.drafts.some(item => item.id === id)) { message.info('草稿暂未载入，请刷新操作与分镜记录。'); return; }
+  view.value = 'storyboard'; await nextTick(); reviewRevision.value++;
+}
+async function addStudioAudio(id: string) {
+  const asset = snapshot.value?.artifacts.find(item => item.id === id && item.kind === 'audio');
+  if (!asset) { message.info('音频素材快照尚未载入，请稍后刷新。'); return; }
+  view.value = 'workbench';
+  if (!draft.value.clips.length) { message.info('先在时间线安排画面，再从独立音轨选择这份配音。'); return; }
+  if (draft.value.audio.length >= 16) { message.warning('独立音轨已达到 16 条，请先移除不需要的音轨。'); return; }
+  draft.value = { ...draft.value, audio: [...draft.value.audio, { artifactId: asset.id, startMs: 0, sourceInMs: 0, gainDb: 0, fadeInMs: 0, fadeOutMs: 0 }] };
+  message.success('配音已加入时间线草稿；请调整入点、音量并保存。');
+  await nextTick(); document.getElementById('audio-tracks')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 </script>
 
 <template>
@@ -177,11 +214,12 @@ async function settleGeneration(input: { id: string; actualAmount: number; curre
       <div v-if="!initialized" class="initial-loading"><NSpin size="large" /><p>正在打开你的片场…</p></div>
       <template v-else>
         <ProjectsView v-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
-        <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" />
+        <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>
         <StoryboardView v-else-if="view === 'storyboard'" :snapshot="snapshot" :board="board" :shots="shots" :selected-shot="selectedShot" :selected-id="selectedId" :fields="editorFields" :editor-mode="editorMode" :editor-dirty="editorDirty" :editor-conflict="editorConflict" :editor-base-revision="editorBaseRevision" :disabled="disabled" :loading="boardLoading" :error="boardError" :calls="calls" :providers="providers" :reviews="reviews" :review-revision="reviewRevision" @update:fields="editorFields = $event" @create="createShot" @select="chooseShot" @save="perform(() => storyboard.saveShot(), '镜头已保存')" @archive="archiveShot" @move="perform(() => storyboard.moveShot($event.id, $event.direction))" @add-candidate="perform(() => storyboard.addCandidate($event), '素材已加入当前视觉版本的候选')" @select-candidate="selectCandidate" @assets="view = 'workbench'" @timeline="saveBoardTimeline" @refresh="perform(() => storyboard.refresh())" @reload-editor="reloadShot" @create-draft="draftComposer = true" @apply-draft="applyDraft" @renew-draft="renewDraft" @reasoning="openReasoning" @generate="openGeneration" @review="saveHumanReview" @details="projectDetailsDialog = true" @settle="settleCall" />
         <WorkbenchView v-else-if="view === 'workbench'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :version="draftBaseVersion" :preview-revision="previewRevision" :disabled="disabled" :saving="saving" :importing="importing" :problems="problems" @update:draft="draft = $event" @import="importFiles" @restore="restoreAsset" @save="saveTimeline" @export="view = 'export'" @reload="reloadTimeline" @settings="view = 'settings'" />
-        <JobsView v-else-if="view === 'jobs'" :jobs="snapshot.jobs" :artifacts="snapshot.artifacts" :cancelling="cancelling" :generations="generationRecords" :providers="providers" :shots="shots" :generation-error="generationError" :disabled="disabled" @cancel="cancelJob" @refresh="perform(() => workspace.refreshProject())" @workbench="view = 'workbench'" @export="view = 'export'" @refresh-generations="perform(() => generation.refresh())" @candidate="viewGenerationCandidate" @cancel-generation="perform(() => generation.mutate(() => generationApi.cancel($event)), '取消请求已记录，等待确认')" @polling="perform(() => generation.mutate(() => generationApi.polling($event.id, $event.paused)))" @retry-download="perform(() => generation.mutate(() => generationApi.retryDownload($event)), '已请求重试原任务结果下载')" @reconcile="reconcileGeneration" @settle-generation="settleGeneration" />
+        <StudioView v-else-if="view === 'studio'" :records="studioOperations" :artifacts="snapshot.artifacts" :providers="providers" :runtimes="runtimes" :disabled="disabled" :error="studioError" @request="openStudio" @settings="view = 'settings'" @refresh="perform(() => studio.refresh())" @cancel="cancelStudio" @retry="perform(() => studio.mutate(() => studioApi.retryIngest($event)), '已请求恢复原回复入库，不会重新调用模型')" @settle="settleStudio" @draft="viewStudioDraft" @audio="addStudioAudio" @candidate="viewGenerationCandidate" />
+        <JobsView v-else-if="view === 'jobs'" :jobs="snapshot.jobs" :artifacts="snapshot.artifacts" :cancelling="cancelling" :generations="generationRecords" :providers="providers" :shots="shots" :studio-operations="studioOperations" @studio="view = 'studio'" :generation-error="generationError" :disabled="disabled" @cancel="cancelJob" @refresh="perform(() => workspace.refreshProject())" @workbench="view = 'workbench'" @export="view = 'export'" @refresh-generations="perform(() => generation.refresh())" @candidate="viewGenerationCandidate" @cancel-generation="perform(() => generation.mutate(() => generationApi.cancel($event)), '取消请求已记录，等待确认')" @polling="perform(() => generation.mutate(() => generationApi.polling($event.id, $event.paused)))" @retry-download="perform(() => generation.mutate(() => generationApi.retryDownload($event)), '已请求重试原任务结果下载')" @reconcile="reconcileGeneration" @settle-generation="settleGeneration" />
         <ExportView v-else-if="view === 'export'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :disabled="disabled" :exporting="exporting" :health="health" :problems="problems" @update:draft="draft = $event" @export="exportTimeline" @jobs="view = 'jobs'" @settings="view = 'settings'" @workbench="view = 'workbench'" />
       </template>
     </main>
@@ -189,8 +227,9 @@ async function settleGeneration(input: { id: string; actualAmount: number; curre
     <template v-if="snapshot">
       <ProjectDetailsDialog v-model:show="projectDetailsDialog" :project="snapshot.project" :disabled="disabled" @save="saveProjectDetails" />
       <DraftComposer v-model:show="draftComposer" :shots="shots" :artifacts="snapshot.artifacts" :disabled="disabled" @create="createDraft" />
-      <ReasoningDialog v-model:show="reasoningDialog" :project="snapshot.project" :shots="shots" :board-revision="board?.revision || 0" :providers="providers" :calls="calls" :generations="generationRecords" :disabled="disabled" @submit="requestReasoning" @settings="reasoningDialog = false; view = 'settings'" />
-      <GenerationDialog v-if="generationShot" v-model:show="generationDialog" :shot="generationShot" :project="snapshot.project" :providers="providers" :artifacts="snapshot.artifacts" :calls="calls" :generations="generationRecords" :disabled="disabled" @submit="submitGeneration" @settings="generationDialog = false; view = 'settings'" />
+      <ReasoningDialog v-model:show="reasoningDialog" :project="snapshot.project" :shots="shots" :board-revision="board?.revision || 0" :providers="providers" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="requestReasoning" @settings="reasoningDialog = false; view = 'settings'" />
+      <GenerationDialog v-if="generationShot" v-model:show="generationDialog" :shot="generationShot" :project="snapshot.project" :providers="providers" :artifacts="snapshot.artifacts" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="submitGeneration" @settings="generationDialog = false; view = 'settings'" />
+      <StudioRequestDialog v-model:show="studioDialog" :kind="studioKind" :project="snapshot.project" :board="board" :artifacts="snapshot.artifacts" :providers="providers" :runtimes="runtimes" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="submitStudio" @settings="studioDialog = false; view = 'settings'" @details="studioDialog = false; projectDetailsDialog = true" />
     </template>
   </div>
 </template>

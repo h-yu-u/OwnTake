@@ -43,7 +43,8 @@ export function validateProfile(value: unknown): ProviderProfile {
   const input = strictRecord(value, ['id', 'label', 'kind', 'baseUrl', 'model', 'capabilities', 'maxOutputTokens', 'timeoutMs', 'createdAt', 'updatedAt']);
   const id = boundedText(input.id, 128);
   invariant(/^[A-Za-z0-9_-]+$/.test(id), 'INVALID_PROVIDER', '连接标识无效。');
-  const rawCapabilities = strictRecord(input.capabilities, ['inputModes', 'ratios', 'durationsSec', 'maxReferences']);
+  const kind = enumeration<ProviderKind>(input.kind, ['chat-completions', 'openai-images', 'ark-video', 'openai-speech']);
+  const rawCapabilities = strictRecord(input.capabilities, ['inputModes', 'ratios', 'durationsSec', 'maxReferences', 'speech', 'frameReview']);
   const inputModes = list<ProviderInputMode>(rawCapabilities.inputModes, ['text', 'first_frame', 'first_last_frame', 'references']);
   invariant(inputModes.length > 0, 'INVALID_PROVIDER', '请至少声明一种输入方式。');
   invariant(Array.isArray(rawCapabilities.durationsSec) && rawCapabilities.durationsSec.length <= 100, 'INVALID_PROVIDER', '时长能力清单无效。');
@@ -53,10 +54,25 @@ export function validateProfile(value: unknown): ProviderProfile {
   });
   invariant(new Set(durationsSec).size === durationsSec.length, 'INVALID_PROVIDER', '时长能力清单不能包含重复项。');
   const capabilities: ProviderCapabilities = { inputModes, ratios: list<Ratio>(rawCapabilities.ratios, ['16:9', '9:16', '1:1']), durationsSec, maxReferences: integer(rawCapabilities.maxReferences, 0, 16) };
+  if (rawCapabilities.speech !== undefined) {
+    invariant(kind === 'openai-speech', 'INVALID_PROVIDER', '配音能力须声明在 Speech 连接上。');
+    const speech = strictRecord(rawCapabilities.speech, ['voices', 'supportsInstructions', 'minSpeed', 'maxSpeed', 'maxInputChars']);
+    invariant(Array.isArray(speech.voices) && speech.voices.length > 0 && speech.voices.length <= 100, 'INVALID_PROVIDER', '配音连接须声明 1–100 个可用声音。');
+    const voices = speech.voices.map(value => boundedText(value, 128));
+    invariant(new Set(voices).size === voices.length, 'INVALID_PROVIDER', '可用声音不能重复。');
+    invariant(typeof speech.supportsInstructions === 'boolean', 'INVALID_PROVIDER', '须明确声明是否支持配音指令。');
+    invariant(typeof speech.minSpeed === 'number' && Number.isFinite(speech.minSpeed) && speech.minSpeed >= 0.25 && typeof speech.maxSpeed === 'number' && Number.isFinite(speech.maxSpeed) && speech.maxSpeed <= 4 && speech.minSpeed <= speech.maxSpeed, 'INVALID_PROVIDER', '配音语速范围须在 0.25–4 之间。');
+    capabilities.speech = { voices, supportsInstructions: speech.supportsInstructions, minSpeed: speech.minSpeed, maxSpeed: speech.maxSpeed, maxInputChars: integer(speech.maxInputChars, 1, 4096) };
+  }
+  if (rawCapabilities.frameReview !== undefined) {
+    invariant(kind === 'chat-completions', 'INVALID_PROVIDER', '抽帧审核能力须声明在 Chat Completions 连接上。');
+    const review = strictRecord(rawCapabilities.frameReview, ['maxImages']);
+    capabilities.frameReview = { maxImages: integer(review.maxImages, 1, 16) };
+  }
   const createdAt = boundedText(input.createdAt, 64), updatedAt = boundedText(input.updatedAt, 64);
   invariant(Number.isFinite(Date.parse(createdAt)) && Number.isFinite(Date.parse(updatedAt)), 'INVALID_PROVIDER', '连接时间字段无效。');
   return {
-    id, label: boundedText(input.label, 120), kind: enumeration<ProviderKind>(input.kind, ['chat-completions', 'openai-images', 'ark-video']),
+    id, label: boundedText(input.label, 120), kind,
     baseUrl: normalizeBaseUrl(input.baseUrl), model: boundedText(input.model, 200), capabilities,
     maxOutputTokens: integer(input.maxOutputTokens ?? 4096, 1, 8192), timeoutMs: integer(input.timeoutMs ?? 60_000, 1, 120_000), createdAt, updatedAt,
   };

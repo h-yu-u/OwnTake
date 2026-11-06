@@ -65,7 +65,8 @@ export class ProviderRepository {
   exposure(projectId: string, currency: string): number {
     const calls = this.listCalls(projectId).filter(c => c.currency === currency).reduce((sum, c) => sum + (c.actualAmount ?? c.reservedAmount), 0);
     const generations = this.store.db.prepare('SELECT body_json FROM generations WHERE project_id=?').all(projectId).map(row => JSON.parse(String(row.body_json)) as { currency: string; actualAmount: number | null; reservedAmount: number });
-    return calls + generations.filter(g => g.currency === currency).reduce((sum, g) => sum + (g.actualAmount ?? g.reservedAmount), 0);
+    const studio = this.store.db.prepare('SELECT body_json FROM studio_operations WHERE project_id=?').all(projectId).map(row => JSON.parse(String(row.body_json)) as { currency: string; actualAmount: number | null; reservedAmount: number });
+    return calls + [...generations, ...studio].filter(g => g.currency === currency).reduce((sum, g) => sum + (g.actualAmount ?? g.reservedAmount), 0);
   }
   createReasoning(projectId: string, value: unknown): StoredCall {
     const b = record(value), providerId = resourceId(b.providerId), operationId = resourceId(b.clientRequestId);

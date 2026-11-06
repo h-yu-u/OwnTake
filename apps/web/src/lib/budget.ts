@@ -1,5 +1,5 @@
-import type { CallRecord, GenerationRecord, Reservation } from '../types.ts';
-type BudgetRecord = Pick<CallRecord | GenerationRecord, 'currency' | 'reservedAmount' | 'actualAmount' | 'status'>;
+import type { CallRecord, GenerationRecord, StudioOperation, Reservation } from '../types.ts';
+type BudgetRecord = Pick<CallRecord | GenerationRecord | StudioOperation, 'currency' | 'reservedAmount' | 'actualAmount' | 'status'>;
 export function budgetUsed(records: BudgetRecord[], currency: Reservation['currency']): number {
   return Math.round(records.filter(record => record.currency === currency).reduce((sum, record) => sum + (record.actualAmount ?? record.reservedAmount), 0) * 10000) / 10000;
 }
