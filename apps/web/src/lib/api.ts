@@ -66,4 +66,5 @@ export const api = {
 };
 
 export function artifactUrl(id: string): string { return `/api/artifacts/${encodeURIComponent(id)}/content`; }
+export function thumbnailUrl(id: string): string { return `/api/artifacts/${encodeURIComponent(id)}/thumbnail`; }
 export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '操作未完成，请重试。'; }

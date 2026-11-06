@@ -19,8 +19,12 @@ export interface TimelineClip {
   fit: 'contain' | 'cover'; muteSource: boolean;
   shotId?: string;
 }
+export interface CaptionStyle {
+  fontFamily?: string; fontSize?: number; color?: string;
+  position?: 'top' | 'center' | 'bottom';
+}
 export interface Caption {
-  startMs: number; endMs: number; text: string;
+  startMs: number; endMs: number; text: string; style?: CaptionStyle;
 }
 export interface AudioTrack {
   artifactId: string; startMs: number; sourceInMs: number; durationMs?: number;
@@ -51,5 +55,5 @@ export interface Health {
   status: 'ok' | 'degraded'; version: string; schemaVersion: number;
   ffmpeg: ToolHealth; ffprobe: ToolHealth; dataDir: string; projectsDir: string;
 }
-export interface AppSettings { ffmpegPath: string; ffprobePath: string }
+export interface AppSettings { ffmpegPath: string; ffprobePath: string; subtitleFontPath?: string }
 export interface ApiError { error: { code: string; message: string; details?: unknown } }

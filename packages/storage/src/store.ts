@@ -225,9 +225,10 @@ export class Store {
   }
 
   updateSettings(patch: Partial<AppSettings>): AppSettings {
-    invariant(patch && typeof patch === 'object' && Object.keys(patch).every(key => ['ffmpegPath', 'ffprobePath'].includes(key)), 'INVALID_INPUT', '设置包含不允许的字段。');
+    invariant(patch && typeof patch === 'object' && Object.keys(patch).every(key => ['ffmpegPath', 'ffprobePath', 'subtitleFontPath'].includes(key)), 'INVALID_INPUT', '设置包含不允许的字段。');
     const next = { ...this.getSettings() };
     for (const key of ['ffmpegPath', 'ffprobePath'] as const) if (patch[key] !== undefined) next[key] = stringValue(patch[key], '工具路径', 2048);
+    if (patch.subtitleFontPath !== undefined) { if (patch.subtitleFontPath === '') delete next.subtitleFontPath; else next.subtitleFontPath = stringValue(patch.subtitleFontPath, '字幕字体路径', 2048); }
     this.db.prepare("INSERT INTO settings (key,value_json) VALUES ('media',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json").run(json(next));
     return next;
   }

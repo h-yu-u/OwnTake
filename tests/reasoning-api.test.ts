@@ -40,7 +40,7 @@ test('reasoning API freezes one billed intent, applies only reviewed changes, an
     assert.equal(app.providers.getProfile(profile.id).profile.baseUrl, profile.baseUrl, 'a different origin must not receive an old service key');
     const credentials = join(app.config.dataDir, 'provider-credentials.json'); assert.equal((await stat(credentials)).mode & 0o777, 0o600);
     assert((await readFile(credentials, 'utf8')).includes('private-test-key'));
-    const request = { providerId: profile.id, clientRequestId: 'one-intent', expectedBoardRevision: 0, expectedProjectRevision: project.revision, reservation: { currency: 'USD', amount: 1, singleLimit: 1, projectLimit: 2 } };
+    const request = { providerId: profile.id, expectedProviderUpdatedAt: profile.updatedAt, clientRequestId: 'one-intent', expectedBoardRevision: 0, expectedProjectRevision: project.revision, reservation: { currency: 'USD', amount: 1, singleLimit: 1, projectLimit: 2 } };
     const blank = await api('/api/projects', 'POST', { name: '未写简报', brief: '', ratio: '16:9' }, 201);
     await api(`/api/projects/${blank.id}/reasoning`, 'POST', request, 400); assert.equal((await api(`/api/projects/${blank.id}/calls`)).length, 0);
     const call = await api(`/api/projects/${project.id}/reasoning`, 'POST', request, 202);

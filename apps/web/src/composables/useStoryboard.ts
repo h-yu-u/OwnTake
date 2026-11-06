@@ -113,12 +113,12 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
   async function saveProvider(id: string | null, input: ProviderInput) {
     return mutate(async () => { const saved = id ? await providerApi.update(id, input) : await providerApi.create(input); providers.value = [saved, ...providers.value.filter(provider => provider.id !== saved.id)]; });
   }
-  async function requestReasoning(providerId: string, reservation: Reservation, clientRequestId: string) {
+  async function requestReasoning(providerId: string, reservation: Reservation, clientRequestId: string, expectedProviderUpdatedAt: string) {
     if (!board.value) return;
     const current = board.value;
     const expectedProjectRevision = project.value!.project.revision;
     return mutate(async () => {
-      const call = await providerApi.reason(current.projectId, { providerId, clientRequestId, expectedBoardRevision: current.revision, expectedProjectRevision, reservation });
+      const call = await providerApi.reason(current.projectId, { providerId, clientRequestId, expectedBoardRevision: current.revision, expectedProjectRevision, expectedProviderUpdatedAt, reservation });
       calls.value = [call, ...calls.value.filter(item => item.id !== call.id)];
       return call;
     });

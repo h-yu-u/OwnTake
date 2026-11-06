@@ -2,8 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AppError } from '../../contracts/src/errors.ts';
 import { storyboardSchema } from './storyboard-schema.ts';
 import { providerSchema } from './provider-schema.ts';
+import { generationSchema } from './generation-schema.ts';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const schema = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -61,6 +62,7 @@ export function initializeSchema(db: DatabaseSync): void {
   try {
     if (current < 1) db.exec(schema);
     if (current < 2) { db.exec(storyboardSchema); db.exec(providerSchema); }
+    if (current < 3) db.exec(generationSchema);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {

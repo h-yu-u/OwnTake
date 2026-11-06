@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { Artifact } from '../types.ts';
-import { artifactUrl } from '../lib/api.ts';
+import { artifactUrl, thumbnailUrl } from '../lib/api.ts';
 import { formatBytes, formatDuration } from '../lib/timeline.ts';
 import AppIcon from './AppIcon.vue';
 const props = defineProps<{ artifact: Artifact | null; compact?: boolean }>();
@@ -12,7 +12,7 @@ watch(() => props.artifact?.id, () => { failed.value = false; });
   <div class="media-preview" :class="{ compact }">
     <template v-if="artifact && !failed">
       <img v-if="artifact.kind === 'image'" :key="artifact.id" :src="artifactUrl(artifact.id)" :alt="artifact.name" @error="failed = true" />
-      <video v-else-if="artifact.kind === 'video'" :key="artifact.id" :src="artifactUrl(artifact.id)" controls preload="metadata" playsinline @error="failed = true" />
+      <video v-else-if="artifact.kind === 'video'" :key="artifact.id" :src="artifactUrl(artifact.id)" :poster="thumbnailUrl(artifact.id)" controls preload="metadata" playsinline @error="failed = true" />
       <div v-else class="audio-preview"><AppIcon name="audio" :size="64" /><span>{{ artifact.name }}</span><audio :key="artifact.id" :src="artifactUrl(artifact.id)" controls preload="metadata" @error="failed = true" /></div>
     </template>
     <div v-else class="preview-placeholder"><AppIcon :name="failed ? 'refresh' : 'film'" :size="40" /><strong>{{ failed ? '浏览器暂时无法预览此素材' : '为你的故事放入第一帧' }}</strong><p>{{ failed ? '检查文件是否仍可访问，或下载后用本地播放器检查。' : '导入图片或视频，选择素材开始预览。' }}</p><a v-if="artifact" :href="artifactUrl(artifact.id)" :download="artifact.name">下载素材检查</a></div>

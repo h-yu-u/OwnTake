@@ -2,9 +2,14 @@ import { mkdir, mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { Artifact, MediaInfo, TimelineClip, TimelineDraft } from '../../contracts/src/index.ts';
 import { AppError, invariant } from '../../contracts/src/errors.ts';
+import { audioTrackDurationMs, validateTimelineOverlays } from '../../domain/src/validation.ts';
 import { inputArguments, inspectInput, probe } from './probe.ts';
 import type { MediaInput } from './probe.ts';
 import { runCommand, throwIfAborted } from './process.ts';
+import { compileAudioMix } from './audio.ts';
+import type { PreparedAudio } from './audio.ts';
+import { compileCaptions } from './captions.ts';
+import { stageSubtitleFont } from './fonts.ts';
 
 export interface ResolvedArtifact { artifact: Artifact; path: string }
 export interface RenderOptions {
@@ -14,6 +19,7 @@ export interface RenderOptions {
   workDir: string;
   ffmpegPath?: string;
   ffprobePath?: string;
+  subtitleFontPath?: string;
   signal?: AbortSignal;
   onProgress?: (fraction: number) => void;
   timeoutMs?: number;
@@ -28,7 +34,6 @@ export function validateTimeline(timeline: TimelineDraft): void {
   invariant(Number.isInteger(timeline.fps) && timeline.fps >= 1 && timeline.fps <= 60, 'INVALID_TIMELINE', '导出帧率必须是 1–60 的整数。');
   invariant(Array.isArray(timeline.clips) && timeline.clips.length >= 1 && timeline.clips.length <= 200, 'INVALID_TIMELINE', '时间线需要 1–200 个片段。');
   invariant(Array.isArray(timeline.captions) && Array.isArray(timeline.audio), 'INVALID_TIMELINE', '字幕与音轨字段必须是数组。');
-  invariant(timeline.captions.length === 0 && timeline.audio.length === 0, 'UNSUPPORTED_MEDIA_FEATURE', '当前阶段尚未启用叠加字幕与独立音轨，不能忽略这些内容导出。', 422);
   for (const clip of timeline.clips) {
     invariant(clip && typeof clip.artifactId === 'string' && clip.artifactId.length > 0 && clip.artifactId.length <= 200, 'INVALID_TIMELINE', '片段素材引用无效。');
     invariant(Number.isFinite(clip.sourceInMs) && clip.sourceInMs >= 0 && clip.sourceInMs <= 86_400_000, 'INVALID_TIMELINE', '素材入点无效。');
@@ -37,6 +42,7 @@ export function validateTimeline(timeline: TimelineDraft): void {
     invariant(typeof clip.muteSource === 'boolean', 'INVALID_TIMELINE', '源音频静音设置无效。');
   }
   invariant(timelineDurationMs(timeline) <= 7_200_000, 'INVALID_TIMELINE', '单次导出最长两小时。');
+  validateTimelineOverlays(timeline);
 }
 
 export function timelineDurationMs(timeline: TimelineDraft): number {
@@ -72,6 +78,8 @@ export async function renderTimeline(options: RenderOptions): Promise<MediaInfo>
   const ffmpegPath = options.ffmpegPath ?? 'ffmpeg';
   const outputPath = resolve(options.outputPath);
   const prepared: PreparedClip[] = [];
+  const preparedAudio: PreparedAudio[] = [];
+  const normalisationShare = timeline.captions.length || timeline.audio.length ? 0.8 : 0.9;
   let lastProgress = 0;
   const progress = (value: number): void => {
     lastProgress = Math.max(lastProgress, Math.min(1, value));
@@ -91,6 +99,15 @@ export async function renderTimeline(options: RenderOptions): Promise<MediaInfo>
     else invariant(clip.sourceInMs + durationMs <= media.durationMs + 1000 / timeline.fps, 'INVALID_TIMELINE', '片段使用范围超过素材时长。');
     prepared.push({ clip, input, media, frames, durationMs });
   }
+  for (const track of timeline.audio) {
+    throwIfAborted(options.signal);
+    const source = await options.resolveArtifact(track.artifactId);
+    invariant(source?.artifact?.id === track.artifactId, 'ASSET_UNAVAILABLE', '无法解析音轨素材。', 404);
+    const input = await inspectInput(source.path);
+    const media = await probe(input.path, { ffprobePath: options.ffprobePath, signal: options.signal });
+    invariant(media.hasAudio, 'INVALID_TIMELINE', '附加音轨素材没有可用的音频流。');
+    preparedAudio.push({ track, input, durationMs: audioTrackDurationMs(track, media.durationMs, expectedDurationMs) });
+  }
   await mkdir(options.workDir, { recursive: true, mode: 0o700 });
   await mkdir(dirname(outputPath), { recursive: true, mode: 0o700 });
   const runDir = await mkdtemp(join(options.workDir, 'render-'));
@@ -103,6 +120,10 @@ export async function renderTimeline(options: RenderOptions): Promise<MediaInfo>
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new AppError('OUTPUT_EXISTS', '输出路径已存在，不能覆盖已有素材或导出。', 409);
       throw error;
+    }
+    if (timeline.captions.length) {
+      const family = await stageSubtitleFont(options.subtitleFontPath, runDir);
+      await writeFile(join(runDir, 'captions.ass'), compileCaptions(timeline, family), { mode: 0o600 });
     }
     let renderedMs = 0;
     const names: string[] = [];
@@ -125,18 +146,22 @@ export async function renderTimeline(options: RenderOptions): Promise<MediaInfo>
       const completedBefore = renderedMs;
       await runCommand(ffmpegPath, args, {
         signal: options.signal, captureStdout: false, timeoutMs: options.timeoutMs ?? Math.max(120_000, item.durationMs * 20),
-        onStdout: progressParser(item.durationMs, fraction => progress(0.9 * (completedBefore + fraction * item.durationMs) / expectedDurationMs)),
+        onStdout: progressParser(item.durationMs, fraction => progress(normalisationShare * (completedBefore + fraction * item.durationMs) / expectedDurationMs)),
       });
       renderedMs += item.durationMs;
-      progress(0.9 * renderedMs / expectedDurationMs);
+      progress(normalisationShare * renderedMs / expectedDurationMs);
     }
     await writeFile(join(runDir, 'concat.txt'), names.map(name => `file '${name}'`).join('\n') + '\n', { mode: 0o600 });
     throwIfAborted(options.signal);
-    await runCommand(ffmpegPath, [
-      '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-f', 'concat', '-safe', '1', '-i', join(runDir, 'concat.txt'),
-      '-map', '0:v:0', '-map', '0:a:0', '-map_metadata', '-1', '-map_chapters', '-1', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2',
-      '-t', seconds(expectedDurationMs), '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', '-f', 'mp4', outputPath,
-    ], { signal: options.signal, captureStdout: false, timeoutMs: options.timeoutMs ?? Math.max(120_000, expectedDurationMs * 5), cwd: runDir, onStdout: progressParser(expectedDurationMs, fraction => progress(0.9 + fraction * 0.08)) });
+    const finalArgs = ['-nostdin', '-hide_banner', '-loglevel', 'error', '-filter_threads', '1', '-filter_complex_threads', '1', '-y', '-protocol_whitelist', 'file,pipe', '-f', 'concat', '-safe', '1', '-i', join(runDir, 'concat.txt')];
+    for (const item of preparedAudio) finalArgs.push('-ss', seconds(item.track.sourceInMs), ...inputArguments(item.input), '-i', item.input.path);
+    finalArgs.push('-map', '0:v:0');
+    if (preparedAudio.length) finalArgs.push('-filter_complex', compileAudioMix(preparedAudio, expectedDurationMs), '-map', '[mixed]');
+    else finalArgs.push('-map', '0:a:0');
+    if (timeline.captions.length) finalArgs.push('-vf', 'ass=filename=captions.ass:fontsdir=fonts', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-threads', '2', '-pix_fmt', 'yuv420p', '-r', String(timeline.fps), '-fps_mode', 'cfr', '-video_track_timescale', String(timeline.fps * 1000));
+    else finalArgs.push('-c:v', 'copy');
+    finalArgs.push('-map_metadata', '-1', '-map_chapters', '-1', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', '-t', seconds(expectedDurationMs), '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', '-f', 'mp4', outputPath);
+    await runCommand(ffmpegPath, finalArgs, { signal: options.signal, captureStdout: false, timeoutMs: options.timeoutMs ?? Math.max(120_000, expectedDurationMs * 5), cwd: runDir, onStdout: progressParser(expectedDurationMs, fraction => progress(normalisationShare + fraction * (0.98 - normalisationShare))) });
     const result = await probe(outputPath, { ffprobePath: options.ffprobePath, signal: options.signal });
     invariant(result.kind === 'video' && result.width === timeline.width && result.height === timeline.height && result.hasAudio, 'INVALID_EXPORT', '导出文件的画幅或媒体流未通过检查。', 422);
     invariant(result.codec === 'h264' && Math.abs((result.fps ?? 0) - timeline.fps) < 0.001, 'INVALID_EXPORT', '导出视频编码或帧率未通过检查。', 422);

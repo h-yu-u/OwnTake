@@ -1,9 +1,9 @@
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { copyFile, mkdir, rename, rm, stat } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { renderTimeline } from '../../../packages/media/src/index.ts';
 import type { Store } from '../../../packages/storage/src/index.ts';
-import type { Job } from '../../../packages/contracts/src/index.ts';
+import type { AppSettings, Job } from '../../../packages/contracts/src/index.ts';
 import { AppError } from '../../../packages/contracts/src/errors.ts';
 import { hashFile, resolveAsset } from './assets.ts';
 export class Scheduler {
@@ -45,10 +45,18 @@ export class Scheduler {
       const outputPath = join(workDir, 'result.mp4');
       await mkdir(workDir, { recursive: true, mode: 0o700 });
       const timeline = this.store.getTimeline(String(job.payload.timelineId));
-      const settings = this.store.getSettings(); let lastUpdate = 0;
+      const settings = { ...((job.payload.mediaSettings as AppSettings | undefined) ?? this.store.getSettings()) }; let lastUpdate = 0;
+      const verified = new Set<string>();
+      if (settings.subtitleFontPath) {
+        const frozenFont = join(workDir, `frozen-font${extname(settings.subtitleFontPath).toLowerCase()}`);
+        await copyFile(settings.subtitleFontPath, frozenFont);
+        if (job.payload.subtitleFontSha256 && await hashFile(frozenFont, signal) !== job.payload.subtitleFontSha256) throw new AppError('FONT_CHANGED', '字体文件与创建导出时不同，请恢复原字体或建立新的导出任务');
+        settings.subtitleFontPath = frozenFont;
+      }
       const media = await renderTimeline({ timeline, outputPath, workDir, ...settings, signal, resolveArtifact: async id => {
         const result = await resolveAsset(this.store, id);
         if (result.artifact.projectId !== job.projectId) throw new AppError('FORBIDDEN_ASSET', '时间线引用了其他项目的素材', 403);
+        if (!verified.has(id)) { if (await hashFile(result.path, signal) !== result.artifact.sha256) throw new AppError('ASSET_CHANGED', `素材「${result.artifact.name}」内容已改变，请恢复原文件`); verified.add(id); }
         return result;
       }, onProgress: progress => { if (Date.now() - lastUpdate > 500) { lastUpdate = Date.now(); this.store.updateJob(job.id, { progress: Math.min(0.99, Math.max(0, progress)) }); } } });
       if (signal.aborted) throw new AppError('CANCELLED', '已停止本地渲染');
