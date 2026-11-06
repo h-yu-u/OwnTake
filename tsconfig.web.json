@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["vite/client", "node"], "lib": ["ES2023", "DOM", "DOM.Iterable"] },
+  "include": ["apps/web/**/*.ts", "apps/web/**/*.vue", "packages/contracts/**/*.ts"]
+}

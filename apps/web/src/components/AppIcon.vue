@@ -1,0 +1,22 @@
+<script setup lang="ts">
+defineProps<{ name: string; size?: number }>();
+const paths: Record<string, string> = {
+  projects: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  workbench: 'M3 5h18v15H3zM3 10h18M9 10v10M7 5l4 5m3-5 4 5',
+  jobs: 'M9 5h12M9 12h12M9 19h12M3 4v2m0 5v2m0 5v2',
+  export: 'M12 3v12m-4-4 4 4 4-4M4 15v6h16v-6',
+  settings: 'M4 5h16M4 12h16M4 19h16M8 3v4m8 3v4m-6 3v4',
+  plus: 'M12 5v14M5 12h14',
+  arrow: 'M4 12h16m-6-6 6 6-6 6',
+  upload: 'M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6',
+  film: 'M3 4h18v16H3zM7 4v16m10-16v16M3 8h4m-4 8h4m10-8h4m-4 8h4',
+  image: 'M3 4h18v16H3zM3 16l6-6 5 5 3-3 4 4M15 8h.01',
+  audio: 'M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4',
+  up: 'm6 14 6-6 6 6',
+  down: 'm6 10 6 6 6-6',
+  remove: 'm6 6 12 12M6 18 18 6',
+  refresh: 'M20 7a9 9 0 1 0 1 9M20 2v6h-6',
+  check: 'm5 12 4 4L19 6',
+};
+</script>
+<template><svg :width="size || 20" :height="size || 20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[name] || paths.film" /></svg></template>
