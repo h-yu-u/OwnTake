@@ -1,0 +1,14 @@
+node_modules/
+dist/
+apps/web/dist/
+release/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+.owntake/
+*.sqlite*
