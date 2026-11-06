@@ -10,13 +10,20 @@ import { json, jsonBody } from './http.ts';
 import { eventStream } from './events.ts';
 import type { ServerConfig } from './config.ts';
 import type { Scheduler } from './scheduler.ts';
-export interface RouteContext { store: Store; config: ServerConfig; scheduler: Scheduler; streams: Set<() => void> }
+import type { StoryboardStore } from '../../../packages/storage/src/storyboard.ts';
+import type { ProviderRepository } from './provider-repository.ts';
+import type { ModelRunner } from './model-runner.ts';
+import { storyboardRoutes } from './storyboard-routes.ts';
+import { providerRoutes } from './provider-routes.ts';
+export interface RouteContext { store: Store; config: ServerConfig; scheduler: Scheduler; streams: Set<() => void>; board: StoryboardStore; providers: ProviderRepository; models: ModelRunner }
 export async function apiRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: RouteContext): Promise<boolean> {
   const { store, config, scheduler } = context; const method = request.method, path = url.pathname;
+  if (await storyboardRoutes(request, response, url, context) || await providerRoutes(request, response, url, context)) return true;
   if (path === '/api/projects' && method === 'GET') { json(response, store.listProjects()); return true; }
   if (path === '/api/projects' && method === 'POST') { json(response, store.createProject(projectInput(await jsonBody(request))), 201); return true; }
   const project = /^\/api\/projects\/([^/]+)$/.exec(path);
   if (project && method === 'GET') { json(response, store.snapshot(resourceId(project[1]))); return true; }
+  if (project && method === 'PUT') { const b = record(await jsonBody(request)); json(response, store.updateProject(resourceId(project[1]), projectInput(b), integer(b.expectedRevision, '项目版本', 1, Number.MAX_SAFE_INTEGER))); return true; }
   const assets = /^\/api\/projects\/([^/]+)\/assets$/.exec(path);
   if (assets && method === 'POST') { json(response, await importAsset(store, request, resourceId(assets[1]), url.searchParams.get('name') || '', config.maxUploadBytes), 201); return true; }
   const content = /^\/api\/artifacts\/([^/]+)\/content$/.exec(path);
@@ -47,7 +54,7 @@ export async function apiRoutes(request: IncomingMessage, response: ServerRespon
   const job = /^\/api\/jobs\/([^/]+)$/.exec(path);
   if (job && method === 'GET') { json(response, store.getJob(resourceId(job[1]))); return true; }
   const cancel = /^\/api\/jobs\/([^/]+)\/cancel$/.exec(path);
-  if (cancel && method === 'POST') { json(response, scheduler.cancel(resourceId(cancel[1]))); return true; }
+  if (cancel && method === 'POST') { const job = store.getJob(resourceId(cancel[1])); json(response, job.type === 'reasoning' ? context.models.cancel(job.id) : scheduler.cancel(job.id)); return true; }
   if (path === '/api/events' && method === 'GET') {
     const after = integer(Number(request.headers['last-event-id'] || url.searchParams.get('after') || 0), '事件游标', 0, Number.MAX_SAFE_INTEGER);
     const stop = eventStream(store, resourceId(url.searchParams.get('projectId')), after, response); context.streams.add(stop); response.on('close', () => context.streams.delete(stop)); return true;

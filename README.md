@@ -57,3 +57,9 @@ OWNTAKE_DATA_DIR=/absolute/path/to/new-data npm run backup -- restore /absolute/
 [文档入口](docs/README.md) · [架构](docs/architecture.md) · [实施计划](docs/implementation-plan.md) · [原始交互原型](docs/prototype/README.md)
 
 开发按 P1–P5 分阶段交付；每阶段的实际验证和限制记录在 `docs/validation/`。原型与正式程序分开，原型中的模拟状态不用于证明正式功能已经实现。
+
+## 分镜与可选推理
+
+「分镜」支持手工镜头、候选选择、版本和修改草稿；「设置」可添加支持严格 JSON Schema 的 Chat Completions 连接。模型建议需逐项审阅后应用。推理调用前会冻结简报/分镜版本并预留用户填写的额度，响应不明不自动重发；金额不等于供应商账单。实际配置要求和流程见 [P2 说明](docs/validation/p2.md)。
+
+本地凭据保存在应用数据目录的 `provider-credentials.json`，权限为 0600；它不进入 Git 或项目备份。迁移机器时需单独安全保存凭据，或重新配置连接。

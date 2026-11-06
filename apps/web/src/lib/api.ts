@@ -49,6 +49,7 @@ function json<T>(path: string, method: string, body: unknown): Promise<T> {
 export const api = {
   projects: () => request<Project[]>('/projects'),
   createProject: (input: { name: string; brief: string; ratio: Ratio }) => json<Project>('/projects', 'POST', input),
+  updateProject: (id: string, input: { name: string; brief: string; ratio: Ratio; expectedRevision: number }) => json<Project>(`/projects/${encodeURIComponent(id)}`, 'PUT', input),
   project: (id: string) => request<ProjectSnapshot>(`/projects/${encodeURIComponent(id)}`),
   importAsset: (projectId: string, file: File) => request<Artifact>(`/projects/${encodeURIComponent(projectId)}/assets?name=${encodeURIComponent(file.name)}`, {
     method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,

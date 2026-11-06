@@ -1,6 +1,6 @@
 import { AppError, invariant } from '../../contracts/src/errors.ts';
 import type { Ratio, TimelineDraft, TimelineClip } from '../../contracts/src/index.ts';
-export const idPattern = /^[a-zA-Z0-9_-]{1,100}$/;
+export const idPattern = /^[a-zA-Z0-9_-]{1,128}$/;
 export function resourceId(value: unknown): string {
   invariant(typeof value === 'string' && idPattern.test(value), 'INVALID_ID', '资源标识不合法');
   return value;

@@ -42,12 +42,12 @@ function snapshotIndex(db: DatabaseSync): Pick<BackupManifest, 'projects' | 'art
   return { projects, artifacts };
 }
 
-function openSnapshot(path: string): DatabaseSync {
+function openSnapshot(path: string, expectedVersion?: number): DatabaseSync {
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     db.exec('PRAGMA trusted_schema = OFF; PRAGMA foreign_keys = ON;');
     const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
-    invariant(version === SCHEMA_VERSION, 'BACKUP_VERSION', '备份数据库版本与应用不兼容。', 409);
+    invariant(version >= 1 && version <= SCHEMA_VERSION && (expectedVersion === undefined || version === expectedVersion), 'BACKUP_VERSION', '备份数据库版本与应用不兼容，或与清单不一致。', 409);
     invariant(db.prepare('PRAGMA quick_check').get()?.quick_check === 'ok', 'BACKUP_INVALID', '备份数据库完整性检查失败。', 409);
     invariant(db.prepare('PRAGMA foreign_key_check').all().length === 0, 'BACKUP_INVALID', '备份中的数据库引用无效。', 409);
     return db;
@@ -66,7 +66,7 @@ export async function createBackup(source: BackupSource, destination: string): P
     // Parameter binding also handles spaces, Chinese names and quotes in the target path.
     source.db.prepare('VACUUM INTO ?').run(databasePath);
     await chmod(databasePath, 0o600);
-    const snapshot = openSnapshot(databasePath);
+    const snapshot = openSnapshot(databasePath, source.schemaVersion);
     let index: Pick<BackupManifest, 'projects' | 'artifacts'>;
     try { index = snapshotIndex(snapshot); } finally { snapshot.close(); }
     for (const project of index.projects) await mkdir(resolve(staging, 'projects', project.id), { recursive: true, mode: 0o700 });
@@ -92,7 +92,7 @@ export async function createBackup(source: BackupSource, destination: string): P
 function validateManifest(value: unknown): BackupManifest {
   invariant(value !== null && typeof value === 'object', 'BACKUP_INVALID', '备份清单无效。', 409);
   const manifest = value as BackupManifest;
-  invariant(manifest.format === 'owntake.backup' && manifest.version === 1 && manifest.schemaVersion === SCHEMA_VERSION, 'BACKUP_VERSION', '备份格式或版本不兼容。', 409);
+  invariant(manifest.format === 'owntake.backup' && manifest.version === 1 && Number.isSafeInteger(manifest.schemaVersion) && manifest.schemaVersion >= 1 && manifest.schemaVersion <= SCHEMA_VERSION, 'BACKUP_VERSION', '备份格式或版本不兼容。', 409);
   invariant(manifest.credentialsIncluded === false && manifest.database?.path === 'app.sqlite' && /^[a-f0-9]{64}$/.test(manifest.database.sha256), 'BACKUP_INVALID', '备份数据库清单无效。', 409);
   integer(manifest.database.sizeBytes, '数据库备份大小', 1);
   invariant(Array.isArray(manifest.projects) && Array.isArray(manifest.artifacts), 'BACKUP_INVALID', '备份项目或素材清单缺失。', 409);
@@ -125,7 +125,7 @@ export async function restoreBackup(backupDir: string, options: { dataDir: strin
   const databasePath = existingProjectFile(source, 'app.sqlite');
   const databaseDigest = await digest(databasePath);
   invariant(databaseDigest.sha256 === manifest.database.sha256 && databaseDigest.sizeBytes === manifest.database.sizeBytes, 'BACKUP_INVALID', '备份数据库摘要不匹配。', 409);
-  const snapshot = openSnapshot(databasePath);
+  const snapshot = openSnapshot(databasePath, manifest.schemaVersion);
   let index: Pick<BackupManifest, 'projects' | 'artifacts'>;
   try { index = snapshotIndex(snapshot); } finally { snapshot.close(); }
   // Paths come from the checked database, not arbitrary manifest input.
