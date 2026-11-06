@@ -15,7 +15,7 @@ function duration(track: AudioTrack): number { return Math.max(0, track.duration
 function time(index: number, key: 'startMs' | 'sourceInMs' | 'fadeInMs' | 'fadeOutMs', value: number | null) { if (value !== null) update(index, { [key]: Math.round(value * 1000) }); }
 </script>
 <template>
-  <section class="panel overlay-editor">
+  <section id="audio-tracks" class="panel overlay-editor" aria-label="独立音轨编辑">
     <div class="panel-heading"><div class="heading-line"><h2>独立音轨</h2><span class="count">{{ modelValue.length }} / 16</span></div></div>
     <div class="audio-track-adder"><NSelect v-model:value="selectedId" :options="options" filterable :disabled="disabled" placeholder="选择已导入的音频素材" aria-label="音轨素材" /><NButton :disabled="disabled || !selectedId || durationMs <= 0 || modelValue.length >= 16" @click="add">添加音轨</NButton></div>
     <p v-if="!options.length" class="overlay-empty">从上方素材库导入音频，再加入配乐或旁白。</p>

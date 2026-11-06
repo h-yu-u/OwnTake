@@ -3,8 +3,9 @@ import { AppError } from '../../contracts/src/errors.ts';
 import { storyboardSchema } from './storyboard-schema.ts';
 import { providerSchema } from './provider-schema.ts';
 import { generationSchema } from './generation-schema.ts';
+import { studioSchema } from './studio-schema.ts';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const schema = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -63,6 +64,7 @@ export function initializeSchema(db: DatabaseSync): void {
     if (current < 1) db.exec(schema);
     if (current < 2) { db.exec(storyboardSchema); db.exec(providerSchema); }
     if (current < 3) db.exec(generationSchema);
+    if (current < 4) db.exec(studioSchema);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {

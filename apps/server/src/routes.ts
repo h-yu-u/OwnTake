@@ -19,10 +19,14 @@ import type { GenerationRepository } from './generation-repository.ts';
 import type { GenerationRunner } from './generation-runner.ts';
 import { generationRoutes } from './generation-routes.ts';
 import type { ThumbnailService } from './thumbnails.ts';
-export interface RouteContext { store: Store; config: ServerConfig; scheduler: Scheduler; streams: Set<() => void>; board: StoryboardStore; providers: ProviderRepository; models: ModelRunner; generations: GenerationRepository; generationRunner: GenerationRunner; thumbnails: ThumbnailService }
+import type { RuntimeRepository } from './runtime-repository.ts';
+import type { StudioRepository } from './studio-repository.ts';
+import type { StudioRunner } from './studio-runner.ts';
+import { studioRoutes } from './studio-routes.ts';
+export interface RouteContext { store: Store; config: ServerConfig; scheduler: Scheduler; streams: Set<() => void>; board: StoryboardStore; providers: ProviderRepository; models: ModelRunner; generations: GenerationRepository; generationRunner: GenerationRunner; thumbnails: ThumbnailService; runtimes:RuntimeRepository; studio:StudioRepository; studioRunner:StudioRunner }
 export async function apiRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: RouteContext): Promise<boolean> {
   const { store, config, scheduler } = context; const method = request.method, path = url.pathname;
-  if (await storyboardRoutes(request, response, url, context) || await providerRoutes(request, response, url, context) || await generationRoutes(request, response, url, context)) return true;
+  if (await storyboardRoutes(request, response, url, context) || await providerRoutes(request, response, url, context) || await generationRoutes(request, response, url, context) || await studioRoutes(request,response,url,context)) return true;
   if (path === '/api/projects' && method === 'GET') { json(response, store.listProjects()); return true; }
   if (path === '/api/projects' && method === 'POST') { json(response, store.createProject(projectInput(await jsonBody(request))), 201); return true; }
   const project = /^\/api\/projects\/([^/]+)$/.exec(path);
@@ -75,7 +79,7 @@ export async function apiRoutes(request: IncomingMessage, response: ServerRespon
   const job = /^\/api\/jobs\/([^/]+)$/.exec(path);
   if (job && method === 'GET') { json(response, store.getJob(resourceId(job[1]))); return true; }
   const cancel = /^\/api\/jobs\/([^/]+)\/cancel$/.exec(path);
-  if (cancel && method === 'POST') { const job = store.getJob(resourceId(cancel[1])); if (job.type === 'generation') { context.generationRunner.cancel(String(job.payload.generationId)); json(response, store.getJob(job.id)); } else json(response, job.type === 'reasoning' ? context.models.cancel(job.id) : scheduler.cancel(job.id)); return true; }
+  if (cancel && method === 'POST') { const job = store.getJob(resourceId(cancel[1])); if (job.type === 'generation') { context.generationRunner.cancel(String(job.payload.generationId)); json(response, store.getJob(job.id)); } else if(job.type==='studio'){context.studioRunner.cancel(String(job.payload.operationId));json(response,store.getJob(job.id));} else json(response, job.type === 'reasoning' ? context.models.cancel(job.id) : scheduler.cancel(job.id)); return true; }
   if (path === '/api/events' && method === 'GET') {
     const after = integer(Number(request.headers['last-event-id'] || url.searchParams.get('after') || 0), '事件游标', 0, Number.MAX_SAFE_INTEGER);
     const stop = eventStream(store, resourceId(url.searchParams.get('projectId')), after, response); context.streams.add(stop); response.on('close', () => context.streams.delete(stop)); return true;

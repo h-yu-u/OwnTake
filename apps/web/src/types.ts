@@ -3,4 +3,7 @@ export type * from '../../../packages/contracts/src/storyboard.ts';
 export type * from '../../../packages/contracts/src/providers.ts';
 export type * from '../../../packages/contracts/src/calls.ts';
 export type * from '../../../packages/contracts/src/generations.ts';
-export type ViewId = 'projects' | 'storyboard' | 'workbench' | 'jobs' | 'export' | 'settings';
+export type * from '../../../packages/contracts/src/studio.ts';
+export type * from '../../../packages/contracts/src/studio-provider.ts';
+export type * from '../../../packages/contracts/src/runtimes.ts';
+export type ViewId = 'projects' | 'storyboard' | 'workbench' | 'studio' | 'jobs' | 'export' | 'settings';

@@ -1,13 +1,24 @@
 import type { Ratio } from './index.ts';
 import type { DraftOperation, Shot } from './storyboard.ts';
 
-export type ProviderKind = 'chat-completions' | 'openai-images' | 'ark-video';
+export type ProviderKind = 'chat-completions' | 'openai-images' | 'ark-video' | 'openai-speech';
 export type ProviderInputMode = 'text' | 'first_frame' | 'first_last_frame' | 'references';
+export interface SpeechCapabilities {
+  voices: string[];
+  supportsInstructions: boolean;
+  minSpeed: number;
+  maxSpeed: number;
+  maxInputChars: number;
+}
+/** Declares both image input and strict JSON Schema output support for sampled reviews. */
+export interface FrameReviewCapabilities { maxImages: number }
 export interface ProviderCapabilities {
   inputModes: ProviderInputMode[];
   ratios: Ratio[];
   durationsSec: number[];
   maxReferences: number;
+  speech?: SpeechCapabilities;
+  frameReview?: FrameReviewCapabilities;
 }
 export interface ProviderProfile {
   id: string;
