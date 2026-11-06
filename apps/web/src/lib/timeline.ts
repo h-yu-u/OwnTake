@@ -8,7 +8,7 @@ export function emptyTimeline(ratio: Ratio): TimelineDraft {
 export function timelineDraft(timeline: Timeline | TimelineDraft): TimelineDraft {
   return { width: timeline.width, height: timeline.height, fps: timeline.fps,
     clips: timeline.clips.map(clip => ({ ...clip })),
-    captions: timeline.captions.map(caption => ({ ...caption })), audio: timeline.audio.map(track => ({ ...track })) };
+    captions: timeline.captions.map(caption => ({ ...caption, ...(caption.style ? { style: { ...caption.style } } : {}) })), audio: timeline.audio.map(track => ({ ...track })) };
 }
 
 export function totalDuration(draft: TimelineDraft): number { return draft.clips.reduce((sum, clip) => sum + clip.durationMs, 0); }
@@ -36,6 +36,26 @@ export function timelineProblems(draft: TimelineDraft, artifacts: Artifact[]): s
     if (!Number.isFinite(clip.durationMs) || clip.durationMs < 1000 / draft.fps) issues.push(`片段 ${index + 1} 的时长不足一帧。`);
     if (!Number.isFinite(clip.sourceInMs) || clip.sourceInMs < 0) issues.push(`片段 ${index + 1} 的入点无效。`);
     if (asset.kind === 'video' && clip.sourceInMs + clip.durationMs > asset.media.durationMs + 1) issues.push(`片段 ${index + 1} 的使用区间超过源视频。`);
+  }
+  const duration = totalDuration(draft);
+  if (draft.captions.length > 1000) issues.push('字幕最多支持 1000 条。');
+  for (const [index, caption] of draft.captions.entries()) {
+    if (!caption.text.trim() || caption.text.length > 2000) issues.push(`字幕 ${index + 1} 需要 1–2000 字的内容。`);
+    if (![caption.startMs, caption.endMs].every(Number.isInteger) || caption.startMs < 0 || caption.endMs > duration || caption.endMs - caption.startMs < 1000 / draft.fps) issues.push(`字幕 ${index + 1} 的时段须在成片内，且至少持续一帧。`);
+    if (caption.style?.fontSize !== undefined && (!Number.isFinite(caption.style.fontSize) || caption.style.fontSize < 8 || caption.style.fontSize > 200)) issues.push(`字幕 ${index + 1} 的字号须在 8–200 像素之间。`);
+    if (caption.style?.color && !/^#[0-9a-fA-F]{6}$/.test(caption.style.color)) issues.push(`字幕 ${index + 1} 的颜色须使用 #RRGGBB 格式。`);
+    if (caption.style?.fontFamily && /[,{}\x00-\x1f\x7f]/.test(caption.style.fontFamily)) issues.push(`字幕 ${index + 1} 的字体族名称包含不支持的字符。`);
+  }
+  if (draft.audio.length > 16) issues.push('独立音轨最多支持 16 条。');
+  for (const [index, track] of draft.audio.entries()) {
+    const artifact = byId.get(track.artifactId);
+    if (!artifact || artifact.kind !== 'audio') { issues.push(`音轨 ${index + 1} 需要可用的音频素材。`); continue; }
+    const available = Math.min(artifact.media.durationMs - track.sourceInMs, duration - track.startMs);
+    const length = track.durationMs ?? available;
+    if (![track.startMs, track.sourceInMs, length].every(Number.isInteger) || track.startMs < 0 || track.sourceInMs < 0 || length < 1 || length > available) issues.push(`音轨 ${index + 1} 的使用区间超过音频或成片范围。`);
+    if (!Number.isFinite(track.gainDb) || track.gainDb < -96 || track.gainDb > 24) issues.push(`音轨 ${index + 1} 的增益须在 -96–24 dB 之间。`);
+    const fades = [track.fadeInMs ?? 0, track.fadeOutMs ?? 0];
+    if (!fades.every(value => Number.isInteger(value) && value >= 0) || fades[0]! + fades[1]! > length) issues.push(`音轨 ${index + 1} 的淡入与淡出总时长不能超过音轨使用时长。`);
   }
   return issues;
 }

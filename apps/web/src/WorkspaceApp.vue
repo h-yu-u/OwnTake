@@ -8,12 +8,16 @@ import { storyboardApi } from './lib/storyboardApi.ts';
 import type { ProviderInput } from './lib/providerApi.ts';
 import { useWorkspace } from './composables/useWorkspace.ts';
 import { useStoryboard } from './composables/useStoryboard.ts';
+import { useGenerations } from './composables/useGenerations.ts';
+import { generationApi } from './lib/generationApi.ts';
+import type { GenerationRequest, HumanReviewInput } from './lib/generationApi.ts';
 import AppIcon from './components/AppIcon.vue';
 import EmptyState from './components/EmptyState.vue';
 import ProjectDialog from './components/ProjectDialog.vue';
 import ProjectDetailsDialog from './components/ProjectDetailsDialog.vue';
 import DraftComposer from './components/DraftComposer.vue';
 import ReasoningDialog from './components/ReasoningDialog.vue';
+import GenerationDialog from './components/GenerationDialog.vue';
 import ProjectsView from './views/ProjectsView.vue';
 import WorkbenchView from './views/WorkbenchView.vue';
 import JobsView from './views/JobsView.vue';
@@ -25,6 +29,8 @@ const workspace = useWorkspace();
 const { projects, snapshot, draft, draftBaseVersion, dirty, health, settings, loading, saving, creating, exporting, importing, busy, connection, connectionError, problems, runningCount } = workspace;
 const storyboard = useStoryboard(snapshot);
 const { board, calls, providers, loading: boardLoading, mutating: boardBusy, loadError: boardError, editorMode, selectedId, selectedShot, fields: editorFields, shots, editorDirty, editorBaseRevision, editorConflict } = storyboard;
+const generation = useGenerations(snapshot);
+const { records: generationRecords, reviews, busy: generationBusy, error: generationError } = generation;
 const message = useMessage();
 const dialog = useDialog();
 const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
@@ -34,6 +40,9 @@ const projectDialog = ref(false);
 const projectDetailsDialog = ref(false);
 const draftComposer = ref(false);
 const reasoningDialog = ref(false);
+const generationDialog = ref(false);
+const generationShotId = ref<string | null>(null);
+const generationShot = computed(() => board.value?.shots.find(shot => shot.id === generationShotId.value) || null);
 const reviewRevision = ref(0);
 const savingProject = ref(false);
 const creatingBoardTimeline = ref(false);
@@ -44,7 +53,7 @@ const checkingHealth = ref(false);
 const restoring = ref(false);
 const previewRevision = ref(0);
 const cancelling = ref<string[]>([]);
-const disabled = computed(() => busy.value || boardBusy.value || savingProject.value || creatingBoardTimeline.value || restoring.value || savingSettings.value || connection.value === 'offline');
+const disabled = computed(() => busy.value || boardBusy.value || generationBusy.value || savingProject.value || creatingBoardTimeline.value || restoring.value || savingSettings.value || connection.value === 'offline');
 const projectOptions = computed(() => projects.value.map(project => ({ label: project.name, value: project.id })));
 const connectionLabel = computed(() => connection.value === 'offline' ? '本地服务离线' : connection.value === 'connecting' ? '正在连接' : health.value?.status === 'degraded' ? '媒体工具待设置' : '本地工作台已就绪');
 
@@ -122,7 +131,7 @@ function saveBoardTimeline() {
     try { if (await perform(async () => { const saved = await storyboardApi.timeline(snapshot.value!.project.id, snapshot.value!.timeline?.version || 0); workspace.adoptTimeline(saved); await workspace.refreshProject().catch(() => undefined); }, '已按分镜顺序保存到时间线')) view.value = 'workbench'; }
     finally { creatingBoardTimeline.value = false; }
   };
-  if (dirty.value) dialog.warning({ title: '用分镜生成新的时间线？', content: '当前时间线还有未保存的调整。继续将按已保存的镜头顺序与所选素材建立新版本，并放弃这些未保存的调整。', positiveText: '使用分镜建立时间线', negativeText: '继续编辑', onPositiveClick: action });
+  if (dirty.value) dialog.warning({ title: '用分镜生成新的时间线？', content: '继续将重建镜头与镜头字幕，并保留最近已保存时间线的音轨和输出设置。当前未保存的调整将放弃；若新时长放不下原音轨，操作会明确报错。', positiveText: '使用分镜建立时间线', negativeText: '继续编辑', onPositiveClick: action });
   else void action();
 }
 async function createDraft(operations: DraftOperation[]) { if (await perform(() => storyboard.createDraft(operations), '草稿已保存，等待逐项审阅')) { draftComposer.value = false; reviewRevision.value++; } }
@@ -133,7 +142,7 @@ function openReasoning() {
   if (!snapshot.value?.project.brief.trim()) { message.info('先写下创作简报，再让模型提出分镜建议。'); projectDetailsDialog.value = true; return; }
   reasoningDialog.value = true;
 }
-async function requestReasoning(input: { providerId: string; reservation: Reservation; clientRequestId: string }) { if (await perform(() => storyboard.requestReasoning(input.providerId, input.reservation, input.clientRequestId), '推理请求已登记，可在调用记录中查看进度')) { reasoningDialog.value = false; reviewRevision.value++; } }
+async function requestReasoning(input: { providerId: string; reservation: Reservation; clientRequestId: string; expectedProviderUpdatedAt: string }) { if (await perform(() => storyboard.requestReasoning(input.providerId, input.reservation, input.clientRequestId, input.expectedProviderUpdatedAt), '推理请求已登记，可在调用记录中查看进度')) { reasoningDialog.value = false; reviewRevision.value++; } }
 async function settleCall(input: { id: string; actualAmount: number; currency: Reservation['currency']; note: string }) { await perform(() => storyboard.settleCall(input.id, { actualAmount: input.actualAmount, currency: input.currency, note: input.note }), '费用核对结果已记录'); }
 async function saveProjectDetails(input: { name: string; brief: string; ratio: Ratio; expectedRevision: number }) {
   if (!snapshot.value) return;
@@ -141,6 +150,20 @@ async function saveProjectDetails(input: { name: string; brief: string; ratio: R
   try { if (await perform(async () => { const project = await api.updateProject(snapshot.value!.project.id, input); snapshot.value = { ...snapshot.value!, project }; projects.value = projects.value.map(item => item.id === project.id ? project : item); await workspace.refreshProject().catch(() => undefined); }, '创作简报已保存')) projectDetailsDialog.value = false; }
   finally { savingProject.value = false; }
 }
+async function openGeneration(id: string) {
+  if (!await perform(() => storyboard.loadProviders())) return;
+  generationShotId.value = id; generationDialog.value = true;
+}
+async function submitGeneration(input: { shotId: string; request: GenerationRequest }) {
+  if (await perform(() => generation.submit(input.shotId, input.request), '生成请求已登记，结果将保存为候选')) { generationDialog.value = false; view.value = 'jobs'; }
+}
+async function saveHumanReview(input: { shotId: string; review: HumanReviewInput }) { await perform(() => generation.review(input.shotId, input.review), '人工复核记录已保存'); }
+function viewGenerationCandidate(id: string) {
+  if (!shots.value.some(shot => shot.id === id)) { message.info('这个镜头已归档，生成文件仍可从任务记录下载。'); return; }
+  confirmEditorDiscard(() => { storyboard.selectShot(id); view.value = 'storyboard'; });
+}
+async function reconcileGeneration(input: { id: string; remoteTaskId: string; note: string }) { await perform(() => generation.mutate(() => generationApi.reconcile(input.id, input.remoteTaskId, input.note)), '已关联原任务，后续只查询原任务状态'); }
+async function settleGeneration(input: { id: string; actualAmount: number; currency: Reservation['currency']; note: string }) { await perform(() => generation.mutate(() => generationApi.settle(input.id, { actualAmount: input.actualAmount, currency: input.currency, note: input.note })), '生成费用核对已记录'); }
 </script>
 
 <template>
@@ -156,9 +179,9 @@ async function saveProjectDetails(input: { name: string; brief: string; ratio: R
         <ProjectsView v-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
         <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>
-        <StoryboardView v-else-if="view === 'storyboard'" :snapshot="snapshot" :board="board" :shots="shots" :selected-shot="selectedShot" :selected-id="selectedId" :fields="editorFields" :editor-mode="editorMode" :editor-dirty="editorDirty" :editor-conflict="editorConflict" :editor-base-revision="editorBaseRevision" :disabled="disabled" :loading="boardLoading" :error="boardError" :calls="calls" :providers="providers" :review-revision="reviewRevision" @update:fields="editorFields = $event" @create="createShot" @select="chooseShot" @save="perform(() => storyboard.saveShot(), '镜头已保存')" @archive="archiveShot" @move="perform(() => storyboard.moveShot($event.id, $event.direction))" @add-candidate="perform(() => storyboard.addCandidate($event), '素材已加入当前视觉版本的候选')" @select-candidate="selectCandidate" @assets="view = 'workbench'" @timeline="saveBoardTimeline" @refresh="perform(() => storyboard.refresh())" @reload-editor="reloadShot" @create-draft="draftComposer = true" @apply-draft="applyDraft" @renew-draft="renewDraft" @reasoning="openReasoning" @details="projectDetailsDialog = true" @settle="settleCall" />
-        <WorkbenchView v-else-if="view === 'workbench'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :version="draftBaseVersion" :preview-revision="previewRevision" :disabled="disabled" :saving="saving" :importing="importing" :problems="problems" @update:draft="draft = $event" @import="importFiles" @restore="restoreAsset" @save="saveTimeline" @export="view = 'export'" @reload="reloadTimeline" />
-        <JobsView v-else-if="view === 'jobs'" :jobs="snapshot.jobs" :artifacts="snapshot.artifacts" :cancelling="cancelling" :disabled="disabled" @cancel="cancelJob" @refresh="perform(() => workspace.refreshProject())" @workbench="view = 'workbench'" @export="view = 'export'" />
+        <StoryboardView v-else-if="view === 'storyboard'" :snapshot="snapshot" :board="board" :shots="shots" :selected-shot="selectedShot" :selected-id="selectedId" :fields="editorFields" :editor-mode="editorMode" :editor-dirty="editorDirty" :editor-conflict="editorConflict" :editor-base-revision="editorBaseRevision" :disabled="disabled" :loading="boardLoading" :error="boardError" :calls="calls" :providers="providers" :reviews="reviews" :review-revision="reviewRevision" @update:fields="editorFields = $event" @create="createShot" @select="chooseShot" @save="perform(() => storyboard.saveShot(), '镜头已保存')" @archive="archiveShot" @move="perform(() => storyboard.moveShot($event.id, $event.direction))" @add-candidate="perform(() => storyboard.addCandidate($event), '素材已加入当前视觉版本的候选')" @select-candidate="selectCandidate" @assets="view = 'workbench'" @timeline="saveBoardTimeline" @refresh="perform(() => storyboard.refresh())" @reload-editor="reloadShot" @create-draft="draftComposer = true" @apply-draft="applyDraft" @renew-draft="renewDraft" @reasoning="openReasoning" @generate="openGeneration" @review="saveHumanReview" @details="projectDetailsDialog = true" @settle="settleCall" />
+        <WorkbenchView v-else-if="view === 'workbench'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :version="draftBaseVersion" :preview-revision="previewRevision" :disabled="disabled" :saving="saving" :importing="importing" :problems="problems" @update:draft="draft = $event" @import="importFiles" @restore="restoreAsset" @save="saveTimeline" @export="view = 'export'" @reload="reloadTimeline" @settings="view = 'settings'" />
+        <JobsView v-else-if="view === 'jobs'" :jobs="snapshot.jobs" :artifacts="snapshot.artifacts" :cancelling="cancelling" :generations="generationRecords" :providers="providers" :shots="shots" :generation-error="generationError" :disabled="disabled" @cancel="cancelJob" @refresh="perform(() => workspace.refreshProject())" @workbench="view = 'workbench'" @export="view = 'export'" @refresh-generations="perform(() => generation.refresh())" @candidate="viewGenerationCandidate" @cancel-generation="perform(() => generation.mutate(() => generationApi.cancel($event)), '取消请求已记录，等待确认')" @polling="perform(() => generation.mutate(() => generationApi.polling($event.id, $event.paused)))" @retry-download="perform(() => generation.mutate(() => generationApi.retryDownload($event)), '已请求重试原任务结果下载')" @reconcile="reconcileGeneration" @settle-generation="settleGeneration" />
         <ExportView v-else-if="view === 'export'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :disabled="disabled" :exporting="exporting" :health="health" :problems="problems" @update:draft="draft = $event" @export="exportTimeline" @jobs="view = 'jobs'" @settings="view = 'settings'" @workbench="view = 'workbench'" />
       </template>
     </main>
@@ -166,7 +189,8 @@ async function saveProjectDetails(input: { name: string; brief: string; ratio: R
     <template v-if="snapshot">
       <ProjectDetailsDialog v-model:show="projectDetailsDialog" :project="snapshot.project" :disabled="disabled" @save="saveProjectDetails" />
       <DraftComposer v-model:show="draftComposer" :shots="shots" :artifacts="snapshot.artifacts" :disabled="disabled" @create="createDraft" />
-      <ReasoningDialog v-model:show="reasoningDialog" :project="snapshot.project" :shots="shots" :board-revision="board?.revision || 0" :providers="providers" :calls="calls" :disabled="disabled" @submit="requestReasoning" @settings="reasoningDialog = false; view = 'settings'" />
+      <ReasoningDialog v-model:show="reasoningDialog" :project="snapshot.project" :shots="shots" :board-revision="board?.revision || 0" :providers="providers" :calls="calls" :generations="generationRecords" :disabled="disabled" @submit="requestReasoning" @settings="reasoningDialog = false; view = 'settings'" />
+      <GenerationDialog v-if="generationShot" v-model:show="generationDialog" :shot="generationShot" :project="snapshot.project" :providers="providers" :artifacts="snapshot.artifacts" :calls="calls" :generations="generationRecords" :disabled="disabled" @submit="submitGeneration" @settings="generationDialog = false; view = 'settings'" />
     </template>
   </div>
 </template>

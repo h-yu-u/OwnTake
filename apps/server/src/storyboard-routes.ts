@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteContext } from './routes.ts';
 import { parseShotFields, parseDraftOperations } from '../../../packages/domain/src/storyboard.ts';
 import { invariant } from '../../../packages/contracts/src/errors.ts';
-import { integer, record, resourceId } from '../../../packages/domain/src/validation.ts';
+import { audioTrackDurationMs, integer, record, resourceId, timelineInput } from '../../../packages/domain/src/validation.ts';
 import { json, jsonBody } from './http.ts';
 import { resolveAsset } from './assets.ts';
 import type { TimelineDraft } from '../../../packages/contracts/src/index.ts';
@@ -29,19 +29,38 @@ export async function storyboardRoutes(request: IncomingMessage, response: Serve
   const timeline = /^\/api\/projects\/([^/]+)\/storyboard\/timeline$/.exec(path);
   if (timeline && method === 'POST') {
     const projectId = resourceId(timeline[1]), b = record(await jsonBody(request)), snapshot = board.snapshot(projectId), project = store.getProject(projectId);
+    const expectedVersion = integer(b.expectedVersion, '时间线版本', 0, Number.MAX_SAFE_INTEGER), previous = store.getLatestTimeline(projectId);
+    invariant((previous?.version ?? 0) === expectedVersion, 'REVISION_CONFLICT', '时间线已被更新，请重新读取后合并修改。', 409);
     const shots = snapshot.shots.filter(s => !s.archived).sort((a, b) => a.order - b.order);
     invariant(shots.length > 0, 'EMPTY_STORYBOARD', '请先创建镜头');
     const size = project.ratio === '9:16' ? [720,1280] : project.ratio === '1:1' ? [720,720] : [1280,720];
-    const clips: TimelineDraft['clips'] = [];
+    const fps = previous?.fps ?? 24, clips: TimelineDraft['clips'] = [], captions: TimelineDraft['captions'] = [];
+    let frames = 0;
     for (const shot of shots) {
+      invariant(shot.caption.length <= 2000, 'STORYBOARD_CAPTION_TOO_LONG', `镜头「${shot.title}」的字幕超过单条合成的 2000 字限制，请精简或分段处理；原文未截断。`, 409);
       invariant(shot.selectedArtifactId, 'MISSING_SELECTION', `镜头「${shot.title}」尚未选择素材`, 409);
       const { artifact } = await resolveAsset(store, shot.selectedArtifactId);
       invariant(artifact.kind !== 'audio' && artifact.projectId === projectId, 'INVALID_ASSET', '所选画面素材不合法');
       invariant(artifact.kind === 'image' || shot.durationMs <= artifact.media.durationMs + 100, 'INVALID_RANGE', `镜头「${shot.title}」时长超过素材，请先调整镜头时长`, 409);
       clips.push({ artifactId: artifact.id, sourceInMs: 0, durationMs: shot.durationMs, fit: 'contain', muteSource: false, shotId: shot.id });
+      const startMs = Math.floor(frames / fps * 1000 + 0.001), count = Math.round(shot.durationMs * fps / 1000);
+      invariant(count >= 1, 'INVALID_TIMELINE', `镜头「${shot.title}」在 ${fps} fps 下不足一帧，请延长时长。`);
+      frames += count;
+      if (shot.caption.trim()) {
+        const endMs = Math.floor(frames / fps * 1000 + 0.001);
+        invariant(endMs - startMs >= 1000 / fps - 0.001, 'INVALID_TIMELINE', `镜头「${shot.title}」的字幕显示不足一帧，请延长时长。`);
+        captions.push({ startMs, endMs, text: shot.caption });
+      }
+    }
+    const input = timelineInput({ width: previous?.width ?? size[0]!, height: previous?.height ?? size[1]!, fps, clips, captions, audio: previous?.audio ?? [], expectedVersion });
+    for (const track of input.audio) {
+      const { artifact } = await resolveAsset(store, track.artifactId);
+      invariant(artifact.projectId === projectId && (artifact.kind === 'audio' || artifact.kind === 'video' && artifact.media.hasAudio), 'INVALID_AUDIO', '保留音轨必须使用当前项目中包含声音的素材');
+      audioTrackDurationMs(track, artifact.media.durationMs, frames / fps * 1000);
     }
     invariant(board.snapshot(projectId).revision === snapshot.revision, 'REVISION_CONFLICT', '分镜在保存期间已改变，请重试', 409);
-    json(response, store.saveTimeline(projectId, { width: size[0]!, height: size[1]!, fps: 24, clips, captions: [], audio: [] }, integer(b.expectedVersion, '时间线版本', 0, Number.MAX_SAFE_INTEGER))); return true;
+    const { expectedVersion: _expectedVersion, ...draft } = input;
+    json(response, store.saveTimeline(projectId, draft, expectedVersion)); return true;
   }
   return false;
 }

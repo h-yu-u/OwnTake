@@ -22,6 +22,7 @@ export function shotProblems(fields: ShotFields): string[] {
 export function storyboardProblems(shots: Shot[], artifacts: Artifact[]): string[] {
   if (!shots.length) return ['先添加一个镜头，再把分镜保存到时间线。'];
   return shots.flatMap((shot, index) => {
+    if (shot.caption.length > 2000) return [`镜头 ${index + 1} 的字幕超过单条合成的 2000 字限制，请先精简或分段处理。`];
     const artifact = artifacts.find(item => item.id === shot.selectedArtifactId);
     if (!artifact) return [`镜头 ${index + 1}「${shot.title}」尚未选用素材。`];
     if (artifact.kind === 'audio') return [`镜头 ${index + 1} 需要图片或视频。`];

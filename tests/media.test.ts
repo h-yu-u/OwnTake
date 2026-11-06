@@ -110,11 +110,11 @@ test('muteSource removes source sound while keeping the normalised audio stream'
   assert(await audioPeak(join(special, 'muted.mp4')) < 5);
 });
 
-test('unsupported features, invalid trim ranges and missing sources fail instead of producing partial movies', async () => {
-  const captions = timeline(); captions.captions = [{ startMs: 0, endMs: 500, text: '字幕' }];
-  assert.throws(() => validateTimeline(captions), { code: 'UNSUPPORTED_MEDIA_FEATURE' });
-  const audio = timeline(); audio.audio = [{ artifactId: 'audio', startMs: 0, sourceInMs: 0, gainDb: 0 }];
-  assert.throws(() => validateTimeline(audio), { code: 'UNSUPPORTED_MEDIA_FEATURE' });
+test('invalid overlays, trim ranges and missing sources fail instead of producing partial movies', async () => {
+  const captions = timeline(); captions.captions = [{ startMs: 0, endMs: 500, text: '' }];
+  assert.throws(() => validateTimeline(captions), { code: 'INVALID_TIMELINE' });
+  const audio = timeline(); audio.audio = [{ artifactId: 'audio', startMs: 0, sourceInMs: 0, durationMs: 500, gainDb: 0, fadeInMs: 1000 }];
+  assert.throws(() => validateTimeline(audio), { code: 'INVALID_TIMELINE' });
   const trim = timeline(); trim.clips[0]!.sourceInMs = 1900;
   await assert.rejects(render(trim, 'invalid-trim.mp4'), { code: 'INVALID_TIMELINE' });
   const item = files.get('red')!;

@@ -62,16 +62,22 @@ export class ProviderRepository {
     this.store.db.prepare('UPDATE provider_calls SET status=?,body_json=? WHERE id=?').run(call.status, JSON.stringify(call), call.id);
     this.store.appendEvent(call.projectId, 'call.updated', { callId: call.id, status: call.status });
   }
-  exposure(projectId: string, currency: string): number { return this.listCalls(projectId).filter(c => c.currency === currency).reduce((sum, c) => sum + (c.actualAmount ?? c.reservedAmount), 0); }
+  exposure(projectId: string, currency: string): number {
+    const calls = this.listCalls(projectId).filter(c => c.currency === currency).reduce((sum, c) => sum + (c.actualAmount ?? c.reservedAmount), 0);
+    const generations = this.store.db.prepare('SELECT body_json FROM generations WHERE project_id=?').all(projectId).map(row => JSON.parse(String(row.body_json)) as { currency: string; actualAmount: number | null; reservedAmount: number });
+    return calls + generations.filter(g => g.currency === currency).reduce((sum, g) => sum + (g.actualAmount ?? g.reservedAmount), 0);
+  }
   createReasoning(projectId: string, value: unknown): StoredCall {
     const b = record(value), providerId = resourceId(b.providerId), operationId = resourceId(b.clientRequestId);
     const expected = integer(b.expectedBoardRevision, '分镜版本', 0, Number.MAX_SAFE_INTEGER), expectedProject = integer(b.expectedProjectRevision, '项目简报版本', 1, Number.MAX_SAFE_INTEGER), reservation = reservationInput(b.reservation);
-    const hash = requestHash({ providerId, expected, expectedProject, reservation });
+    const expectedProviderUpdatedAt = text(b.expectedProviderUpdatedAt, '模型连接版本', 100);
+    const hash = requestHash({ providerId, expected, expectedProject, expectedProviderUpdatedAt, reservation });
     return this.store.transaction(() => {
       const existing = this.store.db.prepare('SELECT request_hash,body_json FROM provider_calls WHERE project_id=? AND operation_id=?').get(projectId, operationId);
       if (existing) { invariant(existing.request_hash === hash, 'IDEMPOTENCY_CONFLICT', '同一调用标识不能用于不同输入', 409); return JSON.parse(String(existing.body_json)) as StoredCall; }
       const { profile, credentialRef } = this.getProfile(providerId);
       invariant(profile.kind === 'chat-completions', 'PROVIDER_CAPABILITY', '请选择推理连接');
+      invariant(profile.updatedAt === expectedProviderUpdatedAt, 'PROVIDER_CHANGED', '模型连接已改变，请重新审阅发送目标', 409);
       const snapshot = this.board.snapshot(projectId), project = this.store.getProject(projectId);
       invariant(snapshot.revision === expected, 'REVISION_CONFLICT', '分镜已更新，请重新审阅调用内容', 409);
       invariant(project.revision === expectedProject, 'REVISION_CONFLICT', '创作简报已更新，请重新审阅调用内容', 409);

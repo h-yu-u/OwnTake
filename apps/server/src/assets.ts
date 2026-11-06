@@ -10,8 +10,8 @@ import { AppError, invariant } from '../../../packages/contracts/src/errors.ts';
 import { probe } from '../../../packages/media/src/index.ts';
 import type { Store } from '../../../packages/storage/src/index.ts';
 const allowed = new Set(['.mp4', '.mov', '.m4v', '.webm', '.mkv', '.png', '.jpg', '.jpeg', '.webp', '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']);
-export async function hashFile(path: string): Promise<string> {
-  const hash = createHash('sha256'); for await (const chunk of createReadStream(path)) hash.update(chunk); return hash.digest('hex');
+export async function hashFile(path: string, signal?: AbortSignal): Promise<string> {
+  const hash = createHash('sha256'); for await (const chunk of createReadStream(path, { signal })) hash.update(chunk); return hash.digest('hex');
 }
 async function verifyHeader(path: string): Promise<void> {
   const file = await open(path, 'r'); const bytes = Buffer.alloc(16);
@@ -29,6 +29,7 @@ export async function resolveAsset(store: Store, artifactId: string): Promise<{ 
   try { canonical = await realpath(path); } catch { throw new AppError('ASSET_UNAVAILABLE', `素材「${artifact.name}」文件缺失，请重新关联`, 409); }
   invariant(canonical.startsWith(root + sep), 'FORBIDDEN_PATH', '素材路径不能通过符号链接离开项目', 403);
   const info = await stat(canonical); invariant(info.isFile(), 'ASSET_UNAVAILABLE', '素材不是可读取的文件', 409);
+  invariant(info.size === artifact.sizeBytes, 'ASSET_CHANGED', '素材文件大小已改变，请恢复原文件', 409);
   return { artifact, path: canonical };
 }
 export async function importAsset(store: Store, request: IncomingMessage, projectId: string, filename: string, maxBytes: number): Promise<Artifact> {

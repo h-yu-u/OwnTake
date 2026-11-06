@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AppError, invariant } from '../../contracts/src/errors.ts';
 import type { Artifact, MediaInfo, Ratio, TimelineDraft } from '../../contracts/src/index.ts';
+import { audioTrackDurationMs, validateTimelineOverlays } from '../../domain/src/validation.ts';
 
 export function validateId(value: unknown): asserts value is string {
   invariant(typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value), 'INVALID_ID', '无效的资源标识。');
@@ -101,23 +102,12 @@ export function validateTimeline(draft: TimelineDraft, resolve: (id: string) => 
     if (clip.shotId !== undefined) validateId(clip.shotId);
     if (asset.kind === 'video') invariant(clip.sourceInMs + clip.durationMs <= asset.media.durationMs + 1000 / draft.fps, 'INVALID_RANGE', '片段超出源视频时长。');
   }
-  for (const caption of draft.captions) {
-    invariant(caption && typeof caption === 'object', 'INVALID_INPUT', '字幕数据无效。');
-    finiteNumber(caption.startMs, '字幕开始时间'); finiteNumber(caption.endMs, '字幕结束时间', caption.startMs + 1);
-    stringValue(caption.text, '字幕', 10000);
-  }
+  validateTimelineOverlays(draft);
+  const totalMs = draft.clips.reduce((sum, clip) => sum + Math.round(clip.durationMs * draft.fps / 1000), 0) / draft.fps * 1000;
   for (const track of draft.audio) {
-    invariant(track && typeof track === 'object', 'INVALID_INPUT', '音轨数据无效。');
-    validateId(track.artifactId);
     const asset = resolve(track.artifactId);
     invariant(asset.kind === 'audio' || asset.media.hasAudio, 'INVALID_INPUT', '音轨素材没有音频流。');
-    finiteNumber(track.startMs, '音轨开始时间'); finiteNumber(track.sourceInMs, '音轨入点');
-    finiteNumber(track.gainDb, '音轨音量', -96, 24);
-    if (track.durationMs !== undefined) finiteNumber(track.durationMs, '音轨时长', 1, 3_600_000);
-    if (track.fadeInMs !== undefined) finiteNumber(track.fadeInMs, '音轨淡入时间');
-    if (track.fadeOutMs !== undefined) finiteNumber(track.fadeOutMs, '音轨淡出时间');
-    invariant(track.sourceInMs < asset.media.durationMs, 'INVALID_RANGE', '音轨入点超出源素材时长。');
-    if (track.durationMs !== undefined) invariant(track.sourceInMs + track.durationMs <= asset.media.durationMs + 1000 / draft.fps, 'INVALID_RANGE', '音轨区间超出源素材时长。');
+    audioTrackDurationMs(track, asset.media.durationMs, totalMs);
   }
   json(draft);
 }
