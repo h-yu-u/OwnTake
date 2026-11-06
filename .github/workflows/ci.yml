@@ -41,6 +41,12 @@ jobs:
         run: |
           brew install ffmpeg-full
           echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+      - name: Prepare a pinned CJK font for media tests
+        run: |
+          font_path="$RUNNER_TEMP/NotoSansCJKsc-Regular.otf"
+          curl --fail --location --retry 2 --max-time 120 --output "$font_path" https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
+          echo "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b  $font_path" | shasum -a 256 -c -
+          echo "OWNTAKE_TEST_FONT=$font_path" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run check
       - run: npm run smoke:desktop
@@ -63,3 +69,9 @@ jobs:
           name: desktop-mac-preview
           path: test-results/*.png
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OwnTake-mac-${{ runner.arch }}
+          path: release/OwnTake-*.zip
+          if-no-files-found: error
+          retention-days: 7

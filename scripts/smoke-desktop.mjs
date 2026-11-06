@@ -41,6 +41,7 @@ const pageErrors = [];
 const remoteRequests = [];
 const observedPages = new WeakSet();
 let running;
+let ownedProcess;
 let temporary;
 let success = false;
 
@@ -92,6 +93,9 @@ async function launch(env) {
   running = await _electron.launch({ cwd: repo, args: [...flags, ...(packagedExecutable ? [] : ['.'])],
     ...(packagedExecutable ? { executablePath: packagedExecutable } : {}),
     chromiumSandbox: !unsafeSandbox, env, timeout: 45000 });
+  // Playwright removes the application dispatcher after close. Retain the
+  // actual ChildProcess while it is still available for exit verification.
+  ownedProcess = running.process();
   running.on('window', observe);
   for (const page of running.windows()) observe(page);
   await running.context().route('**/*', route => {
@@ -176,12 +180,15 @@ async function assertNoPaidOperations(api, projectId) {
 }
 async function normalQuit(dataDir, coreUrl) {
   const app = running;
+  const child = ownedProcess;
   assert.ok(app);
+  assert.ok(child);
   // ElectronApplication.close() calls app.quit(), exercising OwnTake's normal
   // before-quit/core shutdown path rather than destroying its BrowserWindow.
   await bounded(app.close(), 30000, 'Normal application quit');
   running = undefined;
-  assert.equal(app.process().exitCode, 0, 'Electron should exit normally');
+  assert.equal(child.exitCode, 0, 'Electron should exit normally');
+  ownedProcess = undefined;
   await until(() => exists(join(dataDir, 'instance.lock')), locked => !locked, 'Core instance lock release');
   await until(async () => {
     try { const response = await fetch(coreUrl + '/api/session', { signal: AbortSignal.timeout(1000) }); await response.arrayBuffer(); return false; }
@@ -304,6 +311,15 @@ try {
   await navigate(page, '导出');
   await until(() => page.getByRole('link', { name: '下载成片', exact: true }).getAttribute('href'), value => value === `/api/artifacts/${output.id}/content`, 'Export result shown in UI');
   await page.locator('.output-preview video').waitFor({ state: 'visible' });
+  // Decode/play the exported file in the actual renderer. This verifies video
+  // playback, while audio quality remains covered by media tests, not listening.
+  await bounded(page.locator('.output-preview video').evaluate(async video => { video.muted = true; await video.play(); }), 15000, 'Desktop video playback');
+  await page.waitForFunction(() => {
+    const video = document.querySelector('.output-preview video');
+    if (video?.error) throw new Error(`Desktop video decoder failed: ${video.error.code}`);
+    return video && video.readyState >= 2 && video.videoWidth === 320 && video.currentTime > 0.05;
+  });
+  await page.locator('.output-preview video').evaluate(video => video.pause());
   await page.getByRole('button', { name: '在文件夹中显示', exact: true }).click();
   await until(nativeState, state => state.revealed.length === 1, 'Native reveal-artifact request');
   assert.deepEqual((await nativeState()).revealed, [await realpath(join(projectDirectory, output.relativePath))]);
@@ -342,7 +358,7 @@ try {
       await bounded(running.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); }), 2000, 'Cleanup quit dialog');
       await bounded(running.close(), 25000, 'Failure cleanup');
     } catch {
-      const child = running.process();
+      const child = ownedProcess;
       if (child?.exitCode === null) child.kill('SIGKILL');
     }
   }
