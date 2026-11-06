@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="OwnTake 本地 AI 影像工作台交互原型。所有生成、审核与渲染均为演示。">
+  <title>OwnTake · 本地影像工作台原型</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M8 4l3 5m3-5 3 5"/></symbol>
+    <symbol id="i-assets" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="m6 17 4-4 3 3 2-2 3 3"/><circle cx="15.5" cy="10.5" r="1"/></symbol>
+    <symbol id="i-jobs" viewBox="0 0 24 24"><path d="M8 5h13M8 12h13M8 19h13M3 4v2m0 5v2m0 5v2"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="8" cy="5" r="2.5"/><circle cx="16" cy="12" r="2.5"/><circle cx="10" cy="19" r="2.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#workbench" data-nav="workbench" aria-label="OwnTake 分镜工作台">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span>Own<span class="brand-take">Take</span></span>
+      </a>
+      <span class="topbar-divider"></span>
+      <button class="project-switch text-button" type="button" data-nav="projects"><span class="muted">项目</span><strong id="top-project-name">把闪念拍成片</strong><span aria-hidden="true">⌄</span></button>
+      <div class="topbar-spacer"></div>
+      <span class="demo-badge"><span class="status-dot"></span>交互原型 · 无真实调用</span>
+      <button class="icon-button new-project-button" type="button" data-action="new-project" aria-label="新建演示项目"><svg class="icon"><use href="#i-plus"/></svg></button>
+      <button class="button button-primary button-small" type="button" data-nav="export"><svg class="icon"><use href="#i-export"/></svg><span>导出</span></button>
+    </header>
+
+    <nav class="global-nav" aria-label="主导航">
+      <div class="nav-items">
+        <button class="nav-item" type="button" data-nav="projects"><svg class="icon"><use href="#i-grid"/></svg><span>项目</span></button>
+        <button class="nav-item is-active" type="button" data-nav="workbench" aria-current="page"><svg class="icon"><use href="#i-board"/></svg><span>分镜</span></button>
+        <button class="nav-item" type="button" data-nav="assets"><svg class="icon"><use href="#i-assets"/></svg><span>素材</span></button>
+        <button class="nav-item" type="button" data-nav="jobs"><span class="nav-icon-wrap"><svg class="icon"><use href="#i-jobs"/></svg><span class="nav-count" id="job-count">1</span></span><span>任务</span></button>
+        <button class="nav-item" type="button" data-nav="export"><svg class="icon"><use href="#i-export"/></svg><span>导出</span></button>
+        <button class="nav-item" type="button" data-nav="settings"><svg class="icon"><use href="#i-settings"/></svg><span>设置</span></button>
+      </div>
+      <div class="local-mark"><span class="status-dot"></span><span>LOCAL</span></div>
+    </nav>
+
+    <main id="main-content" tabindex="-1">
+      <section id="view-workbench" class="view workbench-view" aria-labelledby="workbench-heading">
+        <div class="page-heading workbench-heading">
+          <div><div class="eyebrow">YOUR STORY, YOUR TAKE</div><h1 id="workbench-heading">把闪念拍成片</h1><p id="project-summary" class="subheading">24 秒 · 16:9 · 4 个镜头</p></div>
+          <div class="heading-actions"><span class="pill" id="project-ready-count">3 / 4 已选素材</span><button class="button button-quiet button-small" type="button" data-action="show-brief">创作简报 <svg class="icon"><use href="#i-arrow"/></svg></button></div>
+        </div>
+
+        <div class="workbench-grid">
+          <aside class="shot-sidebar panel" aria-label="分镜列表">
+            <div class="panel-heading"><h2>分镜</h2><span class="mono muted">01—04</span></div>
+            <div id="shot-list" class="shot-list"></div>
+            <div class="story-note"><span class="eyebrow">创作方向</span><p id="style-note">深色空间，暖色微光。让一个模糊的想法，逐渐变成清晰的作品。</p><button type="button" class="text-button accent-link" data-action="show-brief">查看故事与画风 <span aria-hidden="true">↗</span></button></div>
+          </aside>
+
+          <section class="shot-main panel" aria-labelledby="shot-heading">
+            <div class="shot-toolbar"><div><span id="shot-type" class="eyebrow">生成镜头</span><h2 id="shot-heading">01 · 灵感亮起</h2></div><span class="pill" id="visual-version">画面方案 v1</span></div>
+            <div class="preview-stage"><div id="shot-preview" class="shot-preview" aria-label="静态概念画面"></div><div class="preview-disclaimer">静态概念示意 · 非模型输出</div></div>
+            <div class="preview-controls"><button type="button" id="play-story" class="text-button" aria-label="预览分镜节奏，仅切换静态画面"><svg class="icon"><use href="#i-play"/></svg><span id="play-label">预览节奏</span></button><div class="preview-progress"><span id="preview-progress-fill"></span></div><span id="preview-time" class="mono">00:00 / 00:24</span><span class="small muted">示意</span></div>
+            <div class="detail-tabs" role="tablist" aria-label="镜头详情">
+              <button type="button" id="tab-versions" role="tab" aria-controls="panel-versions" aria-selected="true" data-tab="versions">候选版本 <span id="candidate-count">2</span></button>
+              <button type="button" id="tab-review" role="tab" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">审核与证据</button>
+              <button type="button" id="tab-changes" role="tab" aria-controls="panel-changes" aria-selected="false" tabindex="-1" data-tab="changes">修改影响</button>
+            </div>
+            <div id="panel-versions" class="detail-panel" role="tabpanel" aria-labelledby="tab-versions"><div id="candidate-list" class="candidate-list"></div><div class="candidate-actions"><span id="candidate-hint" class="small muted"></span><button type="button" id="adopt-candidate" class="button button-primary button-small">选用这版</button></div></div>
+            <div id="panel-review" class="detail-panel" role="tabpanel" aria-labelledby="tab-review" hidden><div id="review-content"></div></div>
+            <div id="panel-changes" class="detail-panel" role="tabpanel" aria-labelledby="tab-changes" hidden><div id="change-content"></div></div>
+            <form id="subtitle-form" class="subtitle-form"><label for="shot-subtitle">字幕<span class="muted small">仅影响字幕与最终合成</span></label><div class="input-action"><input id="shot-subtitle" name="subtitle" maxlength="100" autocomplete="off" aria-label="当前镜头字幕"><button type="submit" class="button button-quiet button-small">保存字幕</button></div></form>
+          </section>
+
+          <aside class="inspector panel" aria-label="镜头设置">
+            <div class="panel-heading"><h2>镜头设置</h2><span class="small muted" id="plan-version">方案 v1</span></div>
+            <div class="inspector-section"><label class="field-label" for="shot-intent">画面意图</label><textarea id="shot-intent" rows="3" maxlength="800"></textarea><button type="button" id="save-intent" class="text-button accent-link small">保存画面修改</button></div>
+            <div id="generation-settings">
+              <div class="inspector-section"><label class="field-label" for="shot-mode">生成方式</label><select id="shot-mode"><option value="first_last">首尾帧 → 视频</option><option value="first_frame">首帧 → 视频</option><option value="text">文字 → 视频</option></select><label class="field-label spaced" for="shot-provider">视频能力适配器</label><select id="shot-provider"><option value="demo-a">Demo A · 首尾帧能力</option><option value="demo-b">Demo B · 首帧能力</option></select><div class="provider-caption">虚拟模型，用于演示能力协商</div></div>
+              <div class="capability-list" id="capability-list"></div>
+              <div id="compatibility-message" class="callout"></div>
+              <label class="approval-check"><input type="checkbox" id="approve-plan"><span>已确认此镜头的生成方案<span class="small muted">修改模型或生成方式后需要重新确认</span></span></label>
+              <button type="button" id="submit-generation" class="button button-primary full-width"><svg class="icon"><use href="#i-spark"/></svg>模拟生成新候选</button>
+              <div id="generation-cost" class="cost-note">预计 6 演示点 · 不产生真实费用</div>
+            </div>
+            <div id="local-source-settings" hidden></div>
+            <div class="assistant-card"><div class="assistant-heading"><svg class="icon"><use href="#i-spark"/></svg><strong>镜头助手</strong><span class="pill">演示</span></div><p>围绕当前镜头提出修改，确认后再更新画面方案。</p><button type="button" class="button button-quiet button-small full-width" id="suggest-revision">试试「让镜头更有呼吸感」</button></div>
+          </aside>
+        </div>
+
+        <section class="timeline panel" aria-label="时间线示意">
+          <div class="timeline-heading"><div><h2>时间线</h2><span class="small muted" id="timeline-version">v1 · 仅镜头顺序示意</span></div><div class="small muted"><span class="status-dot"></span> 原始版本会保留</div></div>
+          <div class="timeline-ruler"><span>00:00</span><span>00:06</span><span>00:12</span><span>00:18</span><span>00:24</span></div>
+          <div id="timeline-shots" class="timeline-shots"></div>
+          <div class="timeline-subtitles"><span class="track-label">字幕</span><div id="subtitle-track"></div></div>
+        </section>
+      </section>
+
+      <section id="view-projects" class="view roomy-view" aria-labelledby="projects-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">A PLACE FOR YOUR NEXT IDEA</div><h1 id="projects-heading">你的片场</h1><p class="subheading">从一个闪念，到你自己的作品。</p></div><button class="button button-primary" type="button" data-action="new-project"><svg class="icon"><use href="#i-plus"/></svg>新建演示项目</button></div>
+        <div class="intro-banner"><div><span class="eyebrow">OWNTAKE / LOCAL FIRST</span><h2>把创作留在你的工作台。</h2><p>故事、分镜、候选版本和时间线围绕一个项目组织；模型按能力接入。</p></div><div class="intro-mark" aria-hidden="true"><span class="brand-mark large"><span></span></span></div></div>
+        <div class="section-heading"><h2>项目</h2><span class="muted small">当前仅为浏览器中的演示数据</span></div><div id="project-list" class="project-list"></div>
+        <div class="quiet-note">正式版项目保存在本机目录，元数据由本地服务与 SQLite 管理。此原型不读取或创建真实项目文件。</div>
+      </section>
+
+      <section id="view-assets" class="view roomy-view" aria-labelledby="assets-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">YOUR MATERIAL, EVERY VERSION</div><h1 id="assets-heading">素材与版本</h1><p class="subheading">保留每个候选，让灵感可以回头。</p></div><button type="button" class="button button-primary" data-action="import-demo"><svg class="icon"><use href="#i-plus"/></svg>导入示例素材</button></div>
+        <div class="filter-bar" role="group" aria-label="筛选素材"><button type="button" class="filter-button is-active" data-filter="all" aria-pressed="true">全部</button><button type="button" class="filter-button" data-filter="selected" aria-pressed="false">已选用</button><button type="button" class="filter-button" data-filter="generated" aria-pressed="false">生成候选</button><button type="button" class="filter-button" data-filter="imported" aria-pressed="false">导入 / 合成</button><span class="small muted">均为静态占位素材</span></div>
+        <div id="asset-list" class="asset-list"></div>
+      </section>
+
+      <section id="view-jobs" class="view roomy-view" aria-labelledby="jobs-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">KNOW WHAT IS RUNNING</div><h1 id="jobs-heading">任务与恢复</h1><p class="subheading">任务进度、上游结果与本地素材状态分别记录。</p></div><span class="pill">仅模拟状态机</span></div>
+        <div id="job-overview" class="stat-grid"></div>
+        <div class="callout warning job-explainer"><strong>提交结果不明确时，先核对已有请求。</strong><p>演示中的「提交待核对」不会再次提交付费请求。正式版先使用上游任务 ID、请求标识或人工记录核对结果。</p></div>
+        <div id="job-list" class="job-list"></div>
+        <p class="quiet-note">原型计时器只在浏览器中演示流程。正式版任务由独立的本地服务负责，关闭网页不应取消任务。</p>
+      </section>
+
+      <section id="view-export" class="view roomy-view" aria-labelledby="export-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">MAKE IT A FINISHED TAKE</div><h1 id="export-heading">完成你的作品</h1><p class="subheading">先确认选用版本，再合成一个确定的时间线快照。</p></div><span id="export-version-pill" class="pill">时间线 v1</span></div>
+        <div class="export-grid"><section class="panel export-preview-panel"><div id="export-story-strip" class="export-story-strip"></div><div class="export-film-title"><span class="eyebrow">OWNTAKE FILM</span><h2 id="export-project-title">把闪念拍成片</h2><p id="export-project-info" class="muted">4 个镜头 · 24 秒</p></div><div id="export-result" class="export-result"></div></section><section class="panel export-controls"><h2>导出检查</h2><div id="export-checks" class="export-checks"></div><label class="field-label" for="export-resolution">输出规格（方案示意）</label><select id="export-resolution"><option value="1080p">1080p · H.264 · MP4</option><option value="720p">720p · H.264 · MP4</option></select><div class="callout neutral"><p>正式版使用本地 FFmpeg 合成。本页只模拟渲染，不生成视频文件。</p></div><button id="simulate-export" class="button button-primary full-width" type="button"><svg class="icon"><use href="#i-export"/></svg>模拟渲染</button><button id="download-plan" class="button button-quiet full-width" type="button">下载方案 JSON</button><p class="small muted">JSON 为真实下载，内容是当前演示项目的时间线与素材引用，不是视频。</p></section></div>
+      </section>
+
+      <section id="view-settings" class="view roomy-view" aria-labelledby="settings-heading" hidden>
+        <div class="page-heading"><div><div class="eyebrow">YOUR TOOLS, YOUR CHOICE</div><h1 id="settings-heading">本地设置</h1><p class="subheading">模型能力、代理运行时和媒体工具各自适配。</p></div><span class="pill">演示配置</span></div>
+        <div class="settings-grid"><section class="panel settings-card"><h2>模型与能力</h2><p class="muted">原型只使用虚拟适配器，不绑定具体厂商。</p><div class="provider-card"><span class="provider-avatar">A</span><div><strong>Demo A</strong><p>文字 / 首帧 / 首尾帧 → 视频</p></div><span class="tag good">演示可用</span></div><div class="provider-card"><span class="provider-avatar secondary">B</span><div><strong>Demo B</strong><p>文字 / 首帧 → 视频；不支持尾帧</p></div><span class="tag good">演示可用</span></div><div class="quiet-note">示例能力只演示约束校验，不代表任何真实模型。正式版按具体模型和端点维护能力清单。</div><label class="field-label" for="api-key-placeholder">API Key</label><input id="api-key-placeholder" type="text" placeholder="正式版由本地服务保存；原型不收集密钥" disabled></section><section class="panel settings-card"><h2>运行时与工具</h2><div class="settings-row"><div><strong>Native task loop</strong><p>受约束的规划、工具调用和结果校验</p></div><span class="tag">P2 规划</span></div><div class="settings-row"><div><strong>Claude Code / Codex</strong><p>可选代理运行时，独立于模型适配器</p></div><span class="tag">P4 可选</span></div><div class="settings-row"><div><strong>FFmpeg / ffprobe</strong><p>本地探测、剪裁、字幕与合成</p></div><span class="tag">P1 规划</span></div><button type="button" class="button button-quiet" id="check-environment">模拟环境检查</button><div id="environment-result" class="small muted" role="status">不会探测这台设备的实际运行环境。</div></section><section class="panel settings-card"><h2>任务与额度示意</h2><form id="settings-form"><label class="field-label" for="max-concurrency">演示生成并发</label><select id="max-concurrency"><option value="1">1 个任务</option><option value="2">2 个任务</option><option value="3">3 个任务</option></select><label class="field-label spaced" for="demo-budget">当前项目的演示额度</label><div class="input-unit"><input id="demo-budget" type="number" min="6" max="999" step="1" required><span>演示点</span></div><p class="small muted">不是价格或账户余额。未知提交占用额度，核对后再调整。</p><button type="submit" class="button button-quiet">保存演示设置</button></form></section><section class="panel settings-card"><h2>原型数据</h2><p class="muted">项目与交互状态只保存到当前浏览器的 localStorage。不包含实际媒体、API Key 或正式项目数据库。</p><div class="settings-row"><div><strong>正式版工作区</strong><p class="mono">~/Movies/OwnTake/（规划路径）</p></div></div><button type="button" id="reset-demo" class="button button-danger">重置全部演示数据</button><p class="small muted">恢复初始示例，不会访问本机其他文件。</p></section></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="new-project-dialog" class="modal"><form id="new-project-form"><div class="modal-heading"><div><span class="eyebrow">START WITH AN IDEA</span><h2>新建演示项目</h2></div><button class="icon-button" type="button" data-close aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div><label class="field-label" for="new-title">项目名称</label><input id="new-title" name="title" required maxlength="40" placeholder="例如：凌晨四点的城市" autocomplete="off"><label class="field-label spaced" for="new-brief">你想表达什么？</label><textarea id="new-brief" name="brief" rows="4" required maxlength="1000" placeholder="一句想法、一个故事，或者一种情绪……"></textarea><div class="form-columns"><div><label class="field-label spaced" for="new-ratio">画幅</label><select id="new-ratio" name="ratio"><option value="16:9">16:9 · 横屏</option><option value="9:16">9:16 · 竖屏</option></select></div><div><label class="field-label spaced" for="new-style">画风方向</label><select id="new-style" name="style"><option value="warm">深色空间 · 暖色微光</option><option value="cool">安静城市 · 冷色晨光</option></select></div></div><div class="callout neutral"><p>将载入四镜头、24 秒的示例结构。你的简报会保存，但这里不会调用模型自动编写剧情。</p></div><div class="modal-actions"><button class="button button-quiet" type="button" data-close>取消</button><button class="button button-primary" type="submit">创建演示项目</button></div></form></dialog>
+
+  <dialog id="reconcile-dialog" class="modal"><div class="modal-heading"><div><span class="eyebrow">RECONCILE BEFORE RESUBMITTING</span><h2>核对提交结果</h2></div><button class="icon-button" type="button" data-close aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="callout warning"><p>请求可能已经被上游受理。不会自动发送第二次生成请求。</p></div><div id="reconcile-summary"></div><label class="field-label spaced" for="remote-task-id">上游任务 ID（演示值）</label><input id="remote-task-id" value="demo-upstream-017" autocomplete="off" maxlength="100"><p class="small muted">正式版会查询已有任务或保留人工核对记录；这里用按钮演示核对结果。</p><div class="modal-actions wrap-actions"><button class="button button-quiet" type="button" data-close>保持待核对</button><button class="button button-primary" type="button" id="reconcile-found">模拟查到结果</button></div></dialog>
+
+  <dialog id="detail-dialog" class="modal"><div class="modal-heading"><h2 id="detail-title">详情</h2><button class="icon-button" type="button" data-close aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div><div id="detail-content"></div><div id="detail-actions" class="modal-actions"></div></dialog>
+  <dialog id="reset-dialog" class="modal compact-modal"><div class="modal-heading"><h2>重置演示？</h2></div><p class="muted">清除这个原型保存的项目、候选和任务状态，并恢复初始示例。</p><div class="modal-actions"><button class="button button-quiet" type="button" data-close>取消</button><button class="button button-danger" type="button" id="confirm-reset">重置演示</button></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <noscript><div class="noscript-note">这个交互原型需要启用 JavaScript。产品与架构说明可直接阅读 docs 中的 Markdown 文档。</div></noscript>
+</body>
+</html>
