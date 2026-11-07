@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApplicationContext } from '../../application/context.ts';
-import { canonicalStoryUrl } from '../../../../../packages/providers/src/discovery.ts';
+import { canonicalStoryUrl } from '../../../../../packages/domain/src/story-url.ts';
 import { DiscoverySave, SearchQuery } from '../schemas/discovery.ts';
 
 export function registerDiscoveryRoutes(fastify: FastifyInstance, { stories, discovery }: Pick<ApplicationContext, 'stories' | 'discovery'>): void {
