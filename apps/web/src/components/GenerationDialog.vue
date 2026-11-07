@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { NAlert, NButton, NCheckbox, NForm, NFormItem, NInput, NInputNumber, NModal, NSelect, NTag } from 'naive-ui';
-import type { Artifact, CallRecord, StudioOperation, GenerationPlan, GenerationRecord, PlanValidationResult, Project, ProviderSummary, Reservation, Shot } from '../types.ts';
+import type { ShotCastBinding, Artifact, CallRecord, StudioOperation, GenerationPlan, GenerationRecord, PlanValidationResult, Project, ProviderSummary, Reservation, Shot } from '../types.ts';
 import { artifactUrl, errorMessage } from '../lib/api.ts';
 import { generationApi } from '../lib/generationApi.ts';
 import type { GenerationRequest } from '../lib/generationApi.ts';
@@ -15,6 +15,7 @@ const props = defineProps<{ show: boolean; shot: Shot; project: Project; provide
 const emit = defineEmits<{ 'update:show': [value: boolean]; submit: [input: { shotId: string; request: GenerationRequest }]; settings: []; 'cast-bound': []; characters: [] }>();
 const plan = ref<GenerationPlan>(initialGenerationPlan(props.shot, props.project.ratio));
 const providerId = ref<string | null>(null);
+const castBindings=ref<ShotCastBinding[]>([]);
 const reservation = ref<Reservation>({ currency: 'USD', amount: 0.1, singleLimit: 1, projectLimit: 5 });
 const acknowledged = ref(false);
 const independentAcknowledged = ref(false);
@@ -37,9 +38,18 @@ const fingerprint = computed(() => JSON.stringify({ providerId: providerId.value
 const canSubmit = computed(() => !shotChanged.value && validation.value?.status === 'valid' && provider.value && acknowledged.value && (!unknownCount.value || independentAcknowledged.value) && reservationValid(reservation.value, used.value));
 let validationSequence = 0;
 
+function appendCastPrompt():void {
+  const cast=castBindings.value.filter(role=>plan.value.referenceArtifactIds.includes(role.referenceArtifactId));
+  if(!cast.length)return;
+  const notes=cast.map(role=>{
+    const slot=plan.value.referenceArtifactIds.indexOf(role.referenceArtifactId)+1;
+    return `参考图 ${slot} 是「${role.characterName}」饰演「${role.roleName}」的固定人物形象 v${role.visualVersion}；请保持同一人物的脸部特征，不混合其他角色。`;
+  }).join('\n');
+  if(!plan.value.prompt.includes(notes))plan.value={...plan.value,prompt:[plan.value.prompt,notes].filter(Boolean).join('\n\n')};
+}
 function resetReview() { ++validationSequence; validation.value = null; validationError.value = ''; acknowledged.value = false; independentAcknowledged.value = false; operationId.value = crypto.randomUUID(); }
 watch(() => props.show, show => {
-  if (show) { plan.value = initialGenerationPlan(props.shot, props.project.ratio); shotRevision.value = props.shot.revision; providerId.value = props.providers.find(item => matches(plan.value.kind,item) && (plan.value.referenceArtifactIds.length ? item.kind !== 'openai-images' : true))?.id || null; resetReview(); }
+  if (show) { castBindings.value = []; plan.value = initialGenerationPlan(props.shot, props.project.ratio); shotRevision.value = props.shot.revision; providerId.value = props.providers.find(item => matches(plan.value.kind,item) && (plan.value.referenceArtifactIds.length ? item.kind !== 'openai-images' : true))?.id || null; resetReview(); }
 }, { immediate: true });
 watch(fingerprint, resetReview);
 watch(() => props.shot.revision, resetReview);
@@ -75,7 +85,11 @@ function submit() {
 
 <template>
   <NModal :show="show" preset="card" title="审阅生成候选的请求" class="generation-modal" :mask-closable="!disabled && !validating" :closable="!disabled && !validating" @update:show="emit('update:show', $event)">
-    <ShotCastPanel v-if="show" :shot="shot" :project-id="project.id" :disabled="disabled||validating" @bound="emit('cast-bound')" @characters="emit('characters')" />
+    <ShotCastPanel v-if="show" :shot="shot" :project-id="project.id" :disabled="disabled||validating" @bound="emit('cast-bound')" @characters="emit('characters')" @loaded="castBindings = $event" />
+    <div v-if="castBindings.length" class="generation-validation">
+      <NButton size="small" :disabled="disabled || validating" @click="appendCastPrompt">加入人物与参考图序号提示</NButton>
+      <span class="form-note">对应关系会显示在提示词中，生成前仍需人工审阅。</span>
+    </div>
     <p class="dialog-intro">{{ shot.title }} · 镜头 r{{ shotRevision }} / 视觉要求 v{{ shot.visualRevision }}。生成结果加入候选，由你复核与选择。</p>
     <NAlert v-if="shotChanged" type="warning" :show-icon="false" class="draft-alert">镜头已经更新，当前生成输入仍保留。请核对最新要求，再重新检查能力与输入。<NButton text type="primary" :disabled="disabled" @click="shotRevision = shot.revision; resetReview()">保留输入，按最新镜头重新审阅</NButton></NAlert>
     <NForm @submit.prevent="submit">
