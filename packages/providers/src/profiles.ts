@@ -43,7 +43,7 @@ export function validateProfile(value: unknown): ProviderProfile {
   const input = strictRecord(value, ['id', 'label', 'kind', 'baseUrl', 'model', 'capabilities', 'maxOutputTokens', 'timeoutMs', 'createdAt', 'updatedAt']);
   const id = boundedText(input.id, 128);
   invariant(/^[A-Za-z0-9_-]+$/.test(id), 'INVALID_PROVIDER', '连接标识无效。');
-  const kind = enumeration<ProviderKind>(input.kind, ['chat-completions', 'openai-images', 'ark-video', 'openai-speech']);
+  const kind = enumeration<ProviderKind>(input.kind, ['chat-completions', 'openai-images', 'openai-image-edits', 'ark-video', 'openai-speech']);
   const rawCapabilities = strictRecord(input.capabilities, ['inputModes', 'ratios', 'durationsSec', 'maxReferences', 'speech', 'frameReview']);
   const inputModes = list<ProviderInputMode>(rawCapabilities.inputModes, ['text', 'first_frame', 'first_last_frame', 'references']);
   invariant(inputModes.length > 0, 'INVALID_PROVIDER', '请至少声明一种输入方式。');

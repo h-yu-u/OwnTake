@@ -41,6 +41,19 @@ export function compileGenerationRequest(profileValue: ProviderProfile, planValu
   let request: GenerationRequest;
   if (profile.kind === 'openai-images') {
     request = { endpoint: '/images/generations', body: { model: profile.model, prompt: plan.prompt, n: 1, output_format: 'png', size: imageSizes[plan.ratio] } };
+  } else if (profile.kind === 'openai-image-edits') {
+    invariant(plan.referenceArtifactIds.length >= 1 && plan.inputMode === 'references',
+      'EDIT_REFERENCES_REQUIRED', '图片编辑至少需要一张已确认的静态参考图片');
+    const images = plan.referenceArtifactIds.map(id => {
+      const dataUrl = referenceDataUrl(referenceData[id]);
+      invariant(/^data:image\/(?:png|jpeg|webp);base64,/.test(dataUrl),
+        'EDIT_REFERENCE_FORMAT', '图片编辑只接受 PNG、JPEG 或 WebP 参考图');
+      return { image_url: dataUrl };
+    });
+    request = { endpoint: '/images/edits', body: {
+      model: profile.model, prompt: plan.prompt, n: 1, output_format: 'png',
+      size: imageSizes[plan.ratio], images,
+    } };
   } else {
     const content: Record<string, unknown>[] = [{ type: 'text', text: plan.prompt }];
     plan.referenceArtifactIds.forEach((id, index) => {

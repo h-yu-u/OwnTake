@@ -1,10 +1,11 @@
+import type { CastReferenceSnapshot } from './shot-cast.ts';
 import type { GenerationPlan } from './providers.ts';
 import type { Reservation } from './calls.ts';
 export type GenerationStatus = 'queued' | 'submitting' | 'submission_unknown' | 'waiting_remote' | 'remote_succeeded' | 'ingesting' | 'download_failed' | 'succeeded' | 'failed' | 'cancelled';
 export interface GenerationRecord {
   id: string; projectId: string; shotId: string; shotRevision: number; visualRevision: number;
   providerId: string; providerModel: string; planId: string; attemptId: string; jobId: string;
-  plan: GenerationPlan; status: GenerationStatus; remoteTaskId: string | null; lastRemoteStatus: string | null;
+  plan: GenerationPlan; castReferences?: CastReferenceSnapshot[]; status: GenerationStatus; remoteTaskId: string | null; lastRemoteStatus: string | null;
   cancelRequested: boolean; pollingPaused: boolean;
   currency: Reservation['currency']; reservedAmount: number; actualAmount: number | null;
   artifactId: string | null; candidateId: string | null;

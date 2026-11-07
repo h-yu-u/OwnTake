@@ -1,7 +1,7 @@
 import type { Ratio } from './index.ts';
 import type { DraftOperation, Shot } from './storyboard.ts';
 
-export type ProviderKind = 'chat-completions' | 'openai-images' | 'ark-video' | 'openai-speech';
+export type ProviderKind = 'chat-completions' | 'openai-images' | 'openai-image-edits' | 'ark-video' | 'openai-speech';
 export type ProviderInputMode = 'text' | 'first_frame' | 'first_last_frame' | 'references';
 export interface SpeechCapabilities {
   voices: string[];
