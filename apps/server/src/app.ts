@@ -1,60 +1,124 @@
-import { createServer } from 'node:http';
+import Fastify from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { Store } from '../../../packages/storage/src/index.ts';
 import { AppError } from '../../../packages/contracts/src/errors.ts';
+import type { ApplicationContext } from './application/context.ts';
+import { createCore } from './bootstrap/core.ts';
 import { serverConfig } from './config.ts';
 import type { ServerConfig } from './config.ts';
-import { createSecurity } from './security.ts';
-import { acquireLock } from './instance-lock.ts';
-import { headers, json, sendError } from './http.ts';
-import { apiRoutes } from './routes.ts';
-import { serveStatic } from './static.ts';
-import { Scheduler } from './scheduler.ts';
-import { StoryboardStore } from '../../../packages/storage/src/storyboard.ts';
-import { ProviderRepository } from './provider-repository.ts';
-import { ModelRunner } from './model-runner.ts';
-import { GenerationRepository } from './generation-repository.ts';
-import { GenerationRunner } from './generation-runner.ts';
-import { ThumbnailService } from './thumbnails.ts';
-import { RuntimeRepository } from './runtime-repository.ts';
-import { StudioRepository } from './studio-repository.ts';
-import { StudioRunner } from './studio-runner.ts';
+import { HTTP_CACHE, HTTP_POLICY } from './config/http.ts';
+import { loggerOptions } from './http/logging.ts';
+import { registerErrorHandler } from './http/plugins/errors.ts';
+import { trackHandlers } from './http/plugins/lifecycle.ts';
+import { registerOriginPolicy } from './http/plugins/origin.ts';
+import { bootstrapSession, protectApi, registerSecurity } from './http/plugins/security.ts';
+import { registerStaticFiles } from './http/plugins/static.ts';
+import { registerApplicationRoutes } from './http/routes/index.ts';
+import { registerMediaRoutes } from './http/routes/media.ts';
+import { registerEventRoutes } from './http/routes/events.ts';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    ownTake: ApplicationContext;
+    ownTakeConfig: ServerConfig;
+  }
+}
+
+async function createApplication(overrides: Partial<ServerConfig>) {
+  const config = serverConfig(overrides);
+  const core = await createCore(config);
+  let app: FastifyInstance | undefined;
+  try {
+    app = Fastify({
+      bodyLimit: HTTP_POLICY.jsonBodyLimit,
+      requestTimeout: HTTP_POLICY.requestTimeoutMs,
+      forceCloseConnections: true,
+      logger: loggerOptions(config),
+      genReqId: () => randomUUID(),
+      requestIdHeader: false,
+      exposeHeadRoutes: false,
+      ajv: { customOptions: { coerceTypes: false, useDefaults: false, removeAdditional: false } },
+    });
+    app.server.headersTimeout = HTTP_POLICY.headersTimeoutMs;
+    app.removeContentTypeParser('text/plain');
+    app.decorate('ownTake', core.context);
+    app.decorate('ownTakeConfig', config);
+    const drainHandlers = trackHandlers(app);
+    app.addHook('onRequest', async (request, reply) => {
+      reply.header(HTTP_POLICY.requestIdHeader, request.id);
+    });
+    registerErrorHandler(app);
+    registerOriginPolicy(app, config);
+    app.addHook('preClose', async () => {
+      try { await core.stop(); }
+      catch (error) { app!.log.error({ err: error }, 'Local workers could not stop cleanly'); }
+    });
+    app.addHook('onClose', async () => {
+      await drainHandlers();
+      await core.dispose();
+    });
+
+    // Registration remains lazy: callers can add test plugins before ready()/inject().
+    app.register(async transport => {
+      await registerSecurity(transport);
+      await registerStaticFiles(transport, config);
+      transport.register(async api => {
+        api.addHook('onRequest', async (_request, reply) => {
+          reply.header('Cache-Control', HTTP_CACHE.api);
+        });
+        protectApi(api);
+        api.get('/session', { config: { sessionBootstrap: true } }, bootstrapSession);
+        api.setNotFoundHandler(() => { throw new AppError('NOT_FOUND', '接口不存在', 404); });
+        await registerApplicationRoutes(api, core.context, config);
+        await registerMediaRoutes(api, core.context, config);
+        await registerEventRoutes(api, core.context, config);
+        // Explicit API fallbacks outrank the web asset wildcard and inherit auth.
+        const missing = () => { throw new AppError('NOT_FOUND', '接口不存在', 404); };
+        api.all('/', missing);
+        api.all('/*', missing);
+      }, { prefix: HTTP_POLICY.apiPrefix });
+    });
+    return { app, core, config };
+  } catch (error) {
+    await app?.close().catch(() => undefined);
+    await core.dispose().catch(() => undefined);
+    throw error;
+  }
+}
+
+/** Construct an injectable API without opening a port or starting background recovery. */
+export async function buildApp(overrides: Partial<ServerConfig> = {}): Promise<FastifyInstance> {
+  const { app, core } = await createApplication(overrides);
+  try {
+    // Fastify is thenable: returning it from an async factory boots plugins.
+    // Catch that failure here, before callers have an instance they can close.
+    return await app;
+  } catch (error) {
+    await app.close().catch(() => undefined);
+    await core.dispose().catch(() => undefined);
+    throw error;
+  }
+}
+
+/** The CLI and desktop host share one listener, application resources and shutdown. */
 export async function startServer(overrides: Partial<ServerConfig> = {}) {
-  const config = serverConfig(overrides), releaseLock = await acquireLock(config.dataDir);
-  let store: Store;
-  try { store = new Store({ dataDir: config.dataDir, projectsDir: config.projectsDir }); }
-  catch (error) { await releaseLock(); throw error; }
-  const scheduler = new Scheduler(store), streams = new Set<() => void>(), board = new StoryboardStore(store);
-  let providers: ProviderRepository;
-  try { providers = new ProviderRepository(store, board); } catch (error) { store.close(); await releaseLock(); throw error; }
-  const models = new ModelRunner(providers);
-  const generations = new GenerationRepository(store, board, providers), generationRunner = new GenerationRunner(generations);
-  const thumbnails = new ThumbnailService(store);
-  const runtimes = new RuntimeRepository(store), studio = new StudioRepository(store,board,providers,runtimes), studioRunner = new StudioRunner(studio);
-  const server = createServer(async (request, response) => {
-    headers(response);
-    try {
-      security.validateOrigin(request);
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      if (url.pathname === '/api/session' && request.method === 'GET') { json(response, security.bootstrap(request, response)); return; }
-      if (url.pathname.startsWith('/api/')) security.authorize(request);
-      if (await apiRoutes(request, response, url, { store, scheduler, config, streams, board, providers, models, generations, generationRunner, thumbnails, runtimes, studio, studioRunner })) return;
-      await serveStatic(request, response, config.webDir, url.pathname);
-    } catch (error) {
-      if (!(error instanceof AppError)) console.error('[OwnTake] request failed:', error instanceof Error ? error.name : 'UnknownError');
-      sendError(response, error);
-    }
-  });
-  const security = createSecurity(() => (server.address() as AddressInfo)?.port ?? config.port, config.devOrigin);
-  server.requestTimeout = 300000; server.headersTimeout = 15000;
-  try { await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(config.port, config.host, () => { server.off('error', reject); resolve(); }); }); }
-  catch (error) { store.close(); await releaseLock(); throw error; }
-  scheduler.start(); models.start(); generationRunner.start(); studioRunner.start(); let closing: Promise<void> | null = null;
-  const close = (): Promise<void> => closing ||= (async () => {
-    for (const stop of streams) stop(); streams.clear();
-    await Promise.all([scheduler.stop(), models.stop(), generationRunner.stop(), thumbnails.stop(), studioRunner.stop()]); server.closeAllConnections();
-    await new Promise<void>(resolve => server.close(() => resolve()));
-    store.close(); await releaseLock();
-  })();
-  return { server, store, scheduler, board, providers, models, generations, generationRunner, thumbnails, runtimes, studio, studioRunner, config, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close };
+  const { app, core, config } = await createApplication(overrides);
+  try {
+    await app.listen({ port: config.port, host: config.host });
+    core.start();
+  } catch (error) {
+    await app.close().catch(() => undefined);
+    await core.dispose().catch(() => undefined);
+    throw error;
+  }
+  let closing: Promise<void> | undefined;
+  return {
+    ...core.context,
+    app,
+    server: app.server,
+    config,
+    url: `http://${config.host}:${(app.server.address() as AddressInfo).port}`,
+    close: () => closing ??= app.close(),
+  };
 }
