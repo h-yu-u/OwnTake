@@ -4,16 +4,19 @@ import { NAlert, NButton, NInput, NSelect, NTag, useMessage } from 'naive-ui';
 import type { Ratio, StoryInput, StorySource } from '../types.ts';
 import { useStories } from '../composables/useStories.ts';
 import StoryDiscoverPanel from '../components/StoryDiscoverPanel.vue';
+import { storyboardApi } from '../lib/storyboardApi.ts';
 import { storyApi } from '../lib/storyApi.ts';
 import { errorMessage } from '../lib/api.ts';
 
-const emit = defineEmits<{ 'project-created': [id: string] }>();
+const emit = defineEmits<{ 'project-created': [id: string]; 'storyboard-draft': [projectId: string] }>();
 const state = useStories(), message = useMessage();
 const query = ref(''), error = ref('');
 const showDiscovery = ref(false);
 const editing = ref(false), textScript = ref(''), ratio = ref<Ratio>('16:9');
 const genre = ref(''), title = ref(''), summary = ref(''), tags = ref(''), beats = ref('');
 const source = ref<StorySource>({ platform: 'original', url: '', title: '', author: '', rights: 'original' });
+const selectedProjectId=ref<string|null>(null);
+const projectOptions=computed(()=>state.projects.value.map(link=>({label:link.projectId,value:link.projectId})));
 const latest = computed(() => state.versions.value.at(-1));
 const recentScript = computed(() => state.scripts.value.at(-1));
 const writable = computed(() => title.value.trim().length > 0 && !state.busy.value);
@@ -32,6 +35,7 @@ async function select(id: string): Promise<void> {
     editing.value = true; title.value = current.title; genre.value = current.genre; summary.value = current.summary;
     tags.value = current.tags.join('，'); beats.value = version?.beats.join('\n') ?? '';
     source.value = { ...current.source }; textScript.value = state.scripts.value.at(-1)?.text ?? '';
+    selectedProjectId.value = state.projects.value[0]?.projectId ?? null;
   } catch (failure) { error.value = errorMessage(failure); }
 }
 function payload(): StoryInput {
@@ -58,6 +62,17 @@ async function saveScript(): Promise<void> {
     await state.mutate(() => storyApi.saveScript(selected.id, version.version, textScript.value), query.value);
     message.success('剧本已保存为独立版本，旧版本不会被覆盖');
   } catch (failure) { error.value = errorMessage(failure); }
+}
+async function createStoryboardDraft():Promise<void>{
+  const current=state.selected.value,script=recentScript.value,projectId=selectedProjectId.value;
+  if(!current||!script||!projectId)return;
+  try{
+    error.value='';
+    const board=await storyboardApi.snapshot(projectId);
+    await storyApi.toStoryboard(current.id,projectId,script.version,board.revision);
+    message.success('已创建可审阅的分镜草稿；需在草稿页逐条确认');
+    emit('storyboard-draft',projectId);
+  }catch(failure){error.value=errorMessage(failure);}
 }
 async function createProject(): Promise<void> {
   const current = state.selected.value, version = latest.value;
@@ -105,6 +120,9 @@ onMounted(() => { void search(); });
             <div class="library-project"><h3>创建影视作品</h3><p>从当前故事及剧本的确定版本创建项目，保留素材来源追溯。</p>
               <NAlert v-if="isExternalRestricted" type="warning" :show-icon="false">外部故事尚无改编授权，不能直接用于作品。可将其作为题材灵感，重新创作有权使用的原创故事。</NAlert>
               <div class="library-actions"><NSelect v-model:value="ratio" :options="[{label:'16:9 横屏',value:'16:9'},{label:'9:16 竖屏',value:'9:16'},{label:'1:1 方形',value:'1:1'}]" style="width:180px" /><NButton type="primary" :disabled="isExternalRestricted || state.busy.value" @click="createProject">从此故事创建作品</NButton></div>
+              <div v-if="state.projects.value.length" class="library-project"><h3>将剧本拆成分镜草稿</h3><p>从确定版本提取场景，创建待审阅的分镜草稿，不直接覆盖已有镜头。</p>
+                <div class="library-actions"><NSelect v-model:value="selectedProjectId" :options="projectOptions" placeholder="选择关联作品" style="min-width:210px;width:310px" />
+                <NButton :disabled="!recentScript || !selectedProjectId || state.busy.value || isExternalRestricted" @click="createStoryboardDraft">生成分镜草稿</NButton></div></div>
               <p v-if="state.projects.value.length">已关联 {{ state.projects.value.length }} 个作品。</p>
             </div>
           </div>
