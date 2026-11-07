@@ -8,10 +8,11 @@ import type { GenerationRequest } from '../lib/generationApi.ts';
 import { budgetUsed, reservationValid, unknownReservations } from '../lib/budget.ts';
 import { initialGenerationPlan, inputModeOptions, ratioOptions } from '../lib/generation.ts';
 import AppIcon from './AppIcon.vue';
+import ShotCastPanel from './ShotCastPanel.vue';
 import BudgetReservation from './BudgetReservation.vue';
 
 const props = defineProps<{ show: boolean; shot: Shot; project: Project; providers: ProviderSummary[]; artifacts: Artifact[]; calls: CallRecord[]; generations: GenerationRecord[]; studioOperations: StudioOperation[]; disabled: boolean }>();
-const emit = defineEmits<{ 'update:show': [value: boolean]; submit: [input: { shotId: string; request: GenerationRequest }]; settings: [] }>();
+const emit = defineEmits<{ 'update:show': [value: boolean]; submit: [input: { shotId: string; request: GenerationRequest }]; settings: []; 'cast-bound': []; characters: [] }>();
 const plan = ref<GenerationPlan>(initialGenerationPlan(props.shot, props.project.ratio));
 const providerId = ref<string | null>(null);
 const reservation = ref<Reservation>({ currency: 'USD', amount: 0.1, singleLimit: 1, projectLimit: 5 });
@@ -23,7 +24,10 @@ const validation = ref<PlanValidationResult | null>(null);
 const validationError = ref('');
 const validating = ref(false);
 const provider = computed(() => props.providers.find(item => item.id === providerId.value));
-const providerOptions = computed(() => props.providers.filter(item => item.kind === (plan.value.kind === 'image' ? 'openai-images' : 'ark-video')).map(item => ({ label: `${item.label} · ${item.model}`, value: item.id })));
+const matches=(kind:'image'|'video',provider:ProviderSummary)=>
+  kind === 'video' ? provider.kind==='ark-video' :
+    provider.kind==='openai-images'||provider.kind==='openai-image-edits';
+const providerOptions = computed(() => props.providers.filter(item=>matches(plan.value.kind,item)).map(item => ({ label: `${item.label} · ${item.model}`, value: item.id })));
 const referenceOptions = computed(() => props.artifacts.filter(artifact => artifact.kind === 'image').map(artifact => ({ label: artifact.name, value: artifact.id })));
 const artifactMap = computed(() => new Map(props.artifacts.map(artifact => [artifact.id, artifact])));
 const unknownCount = computed(() => unknownReservations([...props.calls, ...props.generations, ...props.studioOperations]));
@@ -35,7 +39,7 @@ let validationSequence = 0;
 
 function resetReview() { ++validationSequence; validation.value = null; validationError.value = ''; acknowledged.value = false; independentAcknowledged.value = false; operationId.value = crypto.randomUUID(); }
 watch(() => props.show, show => {
-  if (show) { plan.value = initialGenerationPlan(props.shot, props.project.ratio); shotRevision.value = props.shot.revision; providerId.value = props.providers.find(item => item.kind === (plan.value.kind === 'image' ? 'openai-images' : 'ark-video'))?.id || null; resetReview(); }
+  if (show) { plan.value = initialGenerationPlan(props.shot, props.project.ratio); shotRevision.value = props.shot.revision; providerId.value = props.providers.find(item => matches(plan.value.kind,item) && (plan.value.referenceArtifactIds.length ? item.kind !== 'openai-images' : true))?.id || null; resetReview(); }
 }, { immediate: true });
 watch(fingerprint, resetReview);
 watch(() => props.shot.revision, resetReview);
@@ -44,7 +48,7 @@ function changeKind(kind: 'image' | 'video') {
   const next = { ...plan.value, kind };
   if (kind === 'video') next.durationSec = props.shot.durationMs / 1000;
   else delete next.durationSec;
-  plan.value = next; providerId.value = props.providers.find(item => item.kind === (kind === 'image' ? 'openai-images' : 'ark-video'))?.id || null;
+  plan.value = next; providerId.value = props.providers.find(item => matches(kind,item) && (plan.value.referenceArtifactIds.length ? item.kind !== 'openai-images' : true))?.id || null;
 }
 function moveReference(index: number, direction: -1 | 1) {
   const references = [...plan.value.referenceArtifactIds]; const target = index + direction;
@@ -71,6 +75,7 @@ function submit() {
 
 <template>
   <NModal :show="show" preset="card" title="审阅生成候选的请求" class="generation-modal" :mask-closable="!disabled && !validating" :closable="!disabled && !validating" @update:show="emit('update:show', $event)">
+    <ShotCastPanel v-if="show" :shot="shot" :project-id="project.id" :disabled="disabled||validating" @bound="emit('cast-bound')" @characters="emit('characters')" />
     <p class="dialog-intro">{{ shot.title }} · 镜头 r{{ shotRevision }} / 视觉要求 v{{ shot.visualRevision }}。生成结果加入候选，由你复核与选择。</p>
     <NAlert v-if="shotChanged" type="warning" :show-icon="false" class="draft-alert">镜头已经更新，当前生成输入仍保留。请核对最新要求，再重新检查能力与输入。<NButton text type="primary" :disabled="disabled" @click="shotRevision = shot.revision; resetReview()">保留输入，按最新镜头重新审阅</NButton></NAlert>
     <NForm @submit.prevent="submit">
