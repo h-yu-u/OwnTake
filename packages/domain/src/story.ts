@@ -1,4 +1,4 @@
-import { invariant } from '../../contracts/src/errors.ts';
+import { AppError, invariant } from '../../contracts/src/errors.ts';
 import type { StoryInput, StoryPlatform, StoryRights, StorySource } from '../../contracts/src/story.ts';
 import { record, text } from './validation.ts';
 
@@ -17,7 +17,7 @@ export function validateSource(input: unknown): StorySource {
   if (url) {
     let parsed: URL;
     try { parsed = new URL(url); }
-    catch { throw new Error('INVALID_STORY_SOURCE_URL'); }
+    catch { throw new AppError('INVALID_INPUT', '来源仅接受安全的 HTTPS 链接'); }
     invariant(parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.hash && !/[\u0000-\u001f\u007f]/.test(url), 'INVALID_INPUT', '来源仅接受安全的 HTTPS 链接');
   }
   invariant(platform === 'original' ? !url && source.rights === 'original' : source.rights !== 'original', 'INVALID_INPUT', '来源与授权状态不匹配');
