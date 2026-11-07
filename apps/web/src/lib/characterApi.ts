@@ -8,6 +8,8 @@ export const characterApi = {
   create: (input:CharacterInput) => json<Character>('/characters','POST',input),
   update: (value:string,input:CharacterInput,expectedRevision:number) => json<Character>(`/characters/${id(value)}`,'PUT',{...input,expectedRevision}),
   visuals: (value:string) => request<CharacterVisual[]>(`/characters/${id(value)}/visuals`),
+  importArtifact:(value:string,artifactId:string)=>
+    json<CharacterVisual>(`/characters/${id(value)}/visuals/from-artifact`,'POST',{artifactId}),
   upload: (value:string,file:File) => request<CharacterVisual>(`/characters/${id(value)}/visuals`,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file}),
   looks: (value:string) => request<CharacterLook[]>(`/characters/${id(value)}/looks`),
   createLook: (value:string,input:{name:string;outfit:string;mood:string;visualVersion:number}) => json<CharacterLook>(`/characters/${id(value)}/looks`,'POST',input),

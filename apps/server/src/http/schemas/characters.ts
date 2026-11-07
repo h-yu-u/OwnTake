@@ -21,3 +21,5 @@ export const ProjectRoleInput=Type.Object({
   lookId:Type.Union([ResourceId,Type.Null()]),
   roleName:Type.String({minLength:1,maxLength:120}),
 },{additionalProperties:false});
+
+export const VisualFromArtifact=Type.Object({artifactId:ResourceId},{additionalProperties:false});
