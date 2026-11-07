@@ -22,7 +22,7 @@ const ProviderCapabilities = Type.Object({
 
 export const ProviderInput = Type.Object({
   label: Type.String({ maxLength: 120 }),
-  kind: Type.Union([Type.Literal('chat-completions'), Type.Literal('openai-images'), Type.Literal('ark-video'), Type.Literal('openai-speech')]),
+  kind: Type.Union([Type.Literal('chat-completions'), Type.Literal('openai-images'), Type.Literal('openai-image-edits'), Type.Literal('ark-video'), Type.Literal('openai-speech')]),
   baseUrl: Type.String({ maxLength: 2048 }),
   model: Type.String({ maxLength: 200 }),
   capabilities: ProviderCapabilities,
