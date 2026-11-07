@@ -7,7 +7,7 @@ import { shotCastApi } from '../lib/shotCastApi.ts';
 import { errorMessage } from '../lib/api.ts';
 
 const props=defineProps<{shot:Shot;projectId:string;disabled:boolean}>();
-const emit=defineEmits<{bound:[];characters:[]}>();
+const emit=defineEmits<{bound:[];characters:[];loaded:[bindings:ShotCastBinding[]]}>();
 const roles=ref<ProjectRole[]>([]),existing=ref<ShotCastBinding[]>([]),selected=ref<string[]>([]);
 const loading=ref(false),saving=ref(false),error=ref('');
 let sequence=0;
@@ -17,6 +17,7 @@ async function refresh():Promise<void> {
     const [projectRoles,bindings]=await Promise.all([characterApi.roles(props.projectId),shotCastApi.bindings(props.shot.id)]);
     if(seq!==sequence)return;
     roles.value=projectRoles;existing.value=bindings;selected.value=bindings.map(item=>item.roleId);
+    emit('loaded',bindings);
   }catch(failure){if(seq===sequence)error.value=errorMessage(failure);}
   finally{if(seq===sequence)loading.value=false;}
 }
