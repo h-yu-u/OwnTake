@@ -42,7 +42,7 @@ test('deterministic story script breakdown is bounded and reviewable',()=>{
   const scenes=splitScriptScenes('场景一：雨夜\n司机等待。\n场景二：车厢\n乘客上车。');
   assert.equal(scenes.length,2);
   assert.equal(scenes[1]?.title,'场景二：车厢');
-  assert.equal(scriptToDraftOperations('场景一：雨夜\n司机等待。').length,1);
+  assert.equal(scriptToDraftOperations('场景一：雨夜\n司机等待。',()=> 'draftop_test').length,1);
   assert.throws(()=>splitScriptScenes('a'.repeat(13_000)),(e:unknown)=>e instanceof AppError&&e.code==='SCRIPT_SCENE_TOO_LONG');
 });
 test('script to storyboard requires frozen source project and leaves board unchanged until accepted',t=>{

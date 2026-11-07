@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { invariant } from '../../contracts/src/errors.ts';
 import type { DraftOperation } from '../../contracts/src/storyboard.ts';
 import { text } from './validation.ts';
@@ -39,9 +38,9 @@ export function splitScriptScenes(value: unknown): ScriptScene[] {
   });
 }
 /** Generates a reviewable draft, not changes to the live board. */
-export function scriptToDraftOperations(script:string):DraftOperation[] {
+export function scriptToDraftOperations(script:string, nextId:()=>string):DraftOperation[] {
   return splitScriptScenes(script).map(scene=>({
-    id:`draftop_${randomUUID()}`,
+    id:nextId(),
     kind:'add',
     fields:{
       title:scene.title,

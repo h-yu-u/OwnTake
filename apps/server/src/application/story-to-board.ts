@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { invariant } from '../../../../packages/contracts/src/errors.ts';
 import { integer, resourceId } from '../../../../packages/domain/src/validation.ts';
 import { scriptToDraftOperations } from '../../../../packages/domain/src/script-scenes.ts';
@@ -17,7 +18,7 @@ export function storyScriptToStoryboard(context:Pick<ApplicationContext,'stories
   invariant(board.revision===input.expectedBoardRevision,'REVISION_CONFLICT','分镜版本已改变，请重新载入',409);
   return context.board.createDraft(projectId,{
     baseRevision:board.revision,
-    operations:scriptToDraftOperations(script.text),
+    operations:scriptToDraftOperations(script.text,()=>`draftop_${randomUUID()}`),
     source:'manual',
   });
 }
