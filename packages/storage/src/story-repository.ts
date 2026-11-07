@@ -23,7 +23,8 @@ function scriptFrom(row: Row): ScriptVersion {
     sourceVersion: Number(row.source_version), text: String(row.body), createdAt: String(row.created_at) };
 }
 export class StoryRepository {
-  constructor(private readonly store: Store) {}
+  private readonly store: Store;
+  constructor(store: Store) { this.store = store; }
   list(query = ''): Story[] {
     const q = text(query, '检索词', 100, true);
     return this.store.db.prepare(`SELECT * FROM library_stories
