@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { NAlert, NButton, NInput, NSelect, NTag, useMessage } from 'naive-ui';
-import type { CharacterInput, Project } from '../types.ts';
+import type { Artifact, CharacterInput, Project } from '../types.ts';
 import { useCharacters } from '../composables/useCharacters.ts';
 import { characterApi, characterVisualUrl } from '../lib/characterApi.ts';
 import { errorMessage } from '../lib/api.ts';
-const props=defineProps<{projects:Project[];currentProjectId?:string}>();
+const props=defineProps<{projects:Project[];artifacts:Artifact[];currentProjectId?:string}>();
 const state=useCharacters(),message=useMessage();
 const query=ref(''),error=ref(''),editing=ref(false);
 const name=ref(''),biography=ref(''),appearance=ref(''),style=ref(''),voicePreset=ref('');
 const selectedVersion=ref<number|null>(null),lookName=ref(''),outfit=ref(''),mood=ref('');
 const lookId=ref<string|null>(null),projectId=ref<string|null>(props.currentProjectId??null),roleName=ref('');
 const inputFile=ref<HTMLInputElement|null>(null);
+const candidateArtifactId=ref<string|null>(null);
+const artifactOptions=computed(()=>props.artifacts.filter(item=>item.kind==='image'&&item.sizeBytes>0&&item.sizeBytes<=16*1024*1024)
+  .map(item=>({label:item.name,value:item.id})));
 const locked= computed(()=>state.selected.value?.lockedVisualVersion??null);
 const currentVisual=computed(()=>state.visuals.value.find(item=>item.version===selectedVersion.value));
 const lookOptions=computed(()=>state.looks.value.filter(item=>item.visualVersion===selectedVersion.value).map(item=>({label:item.name,value:item.id})));
@@ -46,6 +49,16 @@ async function upload(event:Event){
     selectedVersion.value=visual.version;lookId.value=null;message.success('已锁定不可变人物形象版本');
   }catch(failure){error.value=errorMessage(failure);}
   finally{if(inputFile.value)inputFile.value.value='';}
+}
+async function importProjectArtifact(){
+  const actor=state.selected.value,source=candidateArtifactId.value;
+  if(!actor||!source)return;
+  try{
+    error.value='';
+    const visual=await state.mutate(()=>characterApi.importArtifact(actor.id,source),query.value,projectId.value??undefined);
+    selectedVersion.value=visual.version;lookId.value=null;
+    message.success('已将项目内图片保存为新的不可变人物形象');
+  }catch(failure){error.value=errorMessage(failure);}
 }
 async function saveLook(){
   const actor=state.selected.value,version=selectedVersion.value;
@@ -90,6 +103,10 @@ onMounted(()=>{void search();});
             <div class="actor-section"><div class="actor-row"><h3>锁定视觉形象</h3><NTag size="small" :bordered="false">历史版本不可覆盖</NTag></div>
               <p class="actor-muted">上传静态 PNG / JPEG / WebP（最大 16 MiB、300～6000 像素）。每次上传生成新的锁定形象版本；旧作品仍使用原版本。</p>
               <input ref="inputFile" hidden type="file" accept="image/png,image/jpeg,image/webp" @change="upload" /><NButton :disabled="state.busy.value" @click="inputFile?.click()">上传并锁定新形象</NButton>
+              <div v-if="artifactOptions.length" class="actor-import"><p class="actor-muted">也可将当前项目已有的 AI 生成图片直接保存为人物参考形象，无需重新上传或发起模型调用。</p>
+                <NSelect v-model:value="candidateArtifactId" :options="artifactOptions" filterable clearable placeholder="选择当前作品中已生成的图片" />
+                <NButton :disabled="!candidateArtifactId || state.busy.value" @click="importProjectArtifact">从项目图片创建形象</NButton>
+              </div>
               <div v-if="state.visuals.value.length" class="actor-gallery"><button v-for="visual in state.visuals.value" :key="visual.id" :class="{active:selectedVersion===visual.version}" @click="selectedVersion=visual.version;lookId=null">
                 <img :src="characterVisualUrl(visual.characterId,visual.version)" :alt="'人物形象 v'+visual.version" /><span>v{{visual.version}} · {{visual.width}}×{{visual.height}}</span>
               </button></div>
@@ -116,6 +133,6 @@ onMounted(()=>{void search();});
 .actor-index,.actor-details{background:#161b25;border:1px solid #303949;border-radius:17px;padding:20px}.actor-search{display:flex;gap:8px;margin-bottom:18px}.actor-card{width:100%;display:flex;gap:15px;padding:13px;margin-bottom:10px;text-align:left;background:#242a36;color:inherit;border:1px solid transparent;border-radius:12px;cursor:pointer}.actor-card.active,.actor-card:hover{border-color:#7991b8}
 .actor-card-avatar{width:75px;height:88px;flex-shrink:0;background:#394355;display:flex;align-items:center;justify-content:center;font-size:11px}.actor-card-avatar img{width:100%;height:100%;object-fit:cover}
 .actor-card p{margin:6px 0;max-height:38px;overflow:hidden}.actor-card small{color:#98a5b7}.actor-details{display:flex;flex-direction:column;gap:15px}.actor-details label{display:grid;gap:8px;color:#bcc9de}.actor-row{display:flex;justify-content:space-between;align-items:center;gap:12px}.actor-row>*{flex:1}.actor-row h2{margin:0}.actor-section{display:grid;gap:13px;border-top:1px solid #343e4e;padding-top:20px;margin-top:8px}.actor-section h3{margin:0}
-.actor-gallery{display:flex;gap:12px;flex-wrap:wrap}.actor-gallery button{background:#293446;border:2px solid transparent;border-radius:10px;overflow:hidden;color:#d7e1ef;cursor:pointer;padding:4px}.actor-gallery button.active{border-color:#93b5ff}.actor-gallery img{width:112px;height:130px;display:block;object-fit:cover}.actor-gallery span{display:block;font-size:11px;padding:7px 0}
+.actor-import{display:grid;gap:9px}.actor-gallery{display:flex;gap:12px;flex-wrap:wrap}.actor-gallery button{background:#293446;border:2px solid transparent;border-radius:10px;overflow:hidden;color:#d7e1ef;cursor:pointer;padding:4px}.actor-gallery button.active{border-color:#93b5ff}.actor-gallery img{width:112px;height:130px;display:block;object-fit:cover}.actor-gallery span{display:block;font-size:11px;padding:7px 0}
 @media(max-width:850px){.actor-page{padding:18px}.actor-layout{grid-template-columns:1fr}}
 </style>
