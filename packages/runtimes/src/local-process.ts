@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { delimiter, dirname, isAbsolute } from 'node:path';
 import { AppError } from '../../contracts/src/errors.ts';
 import type { LocalRuntimeKind, RuntimeFailureClassification } from '../../contracts/src/runtimes.ts';
 
@@ -35,13 +35,18 @@ export async function localExecutable(path: string): Promise<string> {
 }
 
 /** A whitelist: it never discovers or reads authentication files. */
-export function localEnvironment(kind: LocalRuntimeKind): NodeJS.ProcessEnv {
+export function localEnvironment(kind: LocalRuntimeKind, binaryPath?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const key of ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TMPDIR', 'TMP', 'TEMP', 'SYSTEMROOT', 'WINDIR', 'HOME', 'USERPROFILE']) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
   const authDirectory = kind === 'codex-cli' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR';
   if (process.env[authDirectory] !== undefined) env[authDirectory] = process.env[authDirectory];
+  // nvm/npm entrypoints use /usr/bin/env node. A desktop launch may not inherit
+  // that Node installation's bin directory; retain the explicitly chosen bin.
+  if (binaryPath && isAbsolute(binaryPath)) {
+    env.PATH = [...new Set([dirname(binaryPath), ...(env.PATH ?? '').split(delimiter)].filter(path => isAbsolute(path)))].join(delimiter);
+  }
   env.NO_COLOR = '1';
   if (kind === 'claude-code') {
     env.CLAUDE_CODE_MAX_RETRIES = '0';

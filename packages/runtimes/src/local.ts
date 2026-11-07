@@ -3,13 +3,14 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { ReasoningResult, ReasoningUsage } from '../../contracts/src/providers.ts';
 import type { LocalDraftInput, LocalRuntimeIdentity, LocalRuntimeInspection, LocalRuntimeKind, LocalRuntimeProfile } from '../../contracts/src/runtimes.ts';
+import { localReasoningEfforts } from '../../contracts/src/runtimes.ts';
 import { parseDraftOperations, parseShotFields } from '../../domain/src/storyboard.ts';
 import { directorInstruction, draftResponseSchema } from '../../providers/src/reasoning-schema.ts';
 import { localEnvironment, localExecutable, localPreflight, runLocalProcess, RuntimeCallError } from './local-process.ts';
 
 export { RuntimeCallError } from './local-process.ts';
 
-const profileKeys = ['id', 'label', 'kind', 'enabled', 'binaryPath', 'model', 'timeoutMs', 'createdAt', 'updatedAt'];
+const profileKeys = ['id', 'label', 'kind', 'enabled', 'binaryPath', 'model', 'reasoningEffort', 'timeoutMs', 'createdAt', 'updatedAt'];
 const activeTasks = new Set<string>();
 const identifier = /^[A-Za-z0-9_-]{1,128}$/;
 const maxInputBytes = 1024 * 1024;
@@ -48,11 +49,13 @@ export function validateLocalRuntime(raw: unknown, identity?: LocalRuntimeIdenti
   const binaryPath = localPath(input.binaryPath);
   const model = text(input.model, 200);
   if (model.startsWith('-')) throw localPreflight('INVALID_LOCAL_RUNTIME', '模型名称不能以命令参数前缀开头。');
+  const reasoningEffort = localReasoningEfforts.find(effort => effort === input.reasoningEffort);
+  if (input.reasoningEffort !== undefined && (!reasoningEffort || input.kind === 'claude-code' && ['none', 'minimal'].includes(reasoningEffort))) throw localPreflight('INVALID_LOCAL_RUNTIME', '此 CLI 的推理强度无效。');
   const timeoutMs = input.timeoutMs ?? 120_000;
   if (typeof timeoutMs !== 'number' || !Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 600_000) throw localPreflight('INVALID_LOCAL_RUNTIME', '本机调用超时须为 100–600000 毫秒的整数。');
   const createdAt = text(input.createdAt, 64), updatedAt = text(input.updatedAt, 64);
   if (!Number.isFinite(Date.parse(createdAt)) || !Number.isFinite(Date.parse(updatedAt))) throw localPreflight('INVALID_LOCAL_RUNTIME', '本机运行时时间字段无效。');
-  return { id, label: text(input.label, 120), kind: input.kind, enabled, binaryPath, model, timeoutMs, createdAt, updatedAt };
+  return { id, label: text(input.label, 120), kind: input.kind, enabled, binaryPath, model, ...(reasoningEffort ? { reasoningEffort } : {}), timeoutMs, createdAt, updatedAt };
 }
 
 function hasFlag(help: string, flag: string): boolean {
@@ -71,11 +74,16 @@ async function inspect(profile: LocalRuntimeProfile, signal?: AbortSignal): Prom
     const executable = await localExecutable(profile.binaryPath);
     result.available = true; result.path = executable;
     directory = await mkdtemp(join(tmpdir(), 'owntake-cli-check-'));
-    const options = { cwd: directory, env: localEnvironment(profile.kind), signal, timeoutMs: 5000, maxStdoutBytes: 256 * 1024, modelInvocation: false };
+    const options = { cwd: directory, env: localEnvironment(profile.kind, profile.binaryPath), signal, timeoutMs: 5000, maxStdoutBytes: 256 * 1024, modelInvocation: false };
     const version = reportedVersion(profile.kind, await runLocalProcess(executable, ['--version'], options));
     if (!version) { result.error = '可执行文件没有报告对应 CLI 的有效版本。'; return result; }
     result.version = version;
     const help = await runLocalProcess(executable, profile.kind === 'codex-cli' ? ['exec', '--help'] : ['--help'], options);
+    if (profile.kind === 'claude-code') {
+      const effortHelp = help.match(/--effort\b[^\n]*(?:\n(?!\s*(?:--|-[A-Za-z],))[^\n]*){0,3}/)?.[0] ?? '';
+      result.reasoningEfforts = hasFlag(help, '--effort') ? localReasoningEfforts.filter(effort => !['none', 'minimal'].includes(effort) && new RegExp(`\\b${effort}\\b`).test(effortHelp)) : [];
+      if (profile.reasoningEffort && !result.reasoningEfforts.includes(profile.reasoningEffort)) { result.error = '此 CLI 版本未报告所选推理强度支持，请更新 CLI 或选择模型默认。'; return result; }
+    }
     let missing = (profile.kind === 'codex-cli' ? codexFlags : claudeFlags).filter(flag => !hasFlag(help, flag));
     // Claude 2.1.319 hides this documented flag from help. Help accepts unknown
     // flags too, so a successful help call alone proves nothing: require its
@@ -179,6 +187,7 @@ function decodeCodex(stdout: string): { draft: unknown; usage?: ReasoningUsage }
 function argumentsFor(profile: LocalRuntimeProfile, schemaPath: string): string[] {
   if (profile.kind === 'claude-code') return [
     '--print', '--output-format', 'json', '--json-schema', JSON.stringify(draftResponseSchema), '--model', profile.model,
+    ...(profile.reasoningEffort ? ['--effort', profile.reasoningEffort] : []),
     // The schema mechanism adds its own StructuredOutput tool. A wildcard deny
     // could block that output, so deny MCP specifically while builtin tools stay empty.
     '--tools', '', '--disallowedTools', 'mcp__*', '--permission-mode', 'dontAsk', '--safe-mode',
@@ -190,6 +199,7 @@ function argumentsFor(profile: LocalRuntimeProfile, schemaPath: string): string[
   return [
     'exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only', '--color', 'never',
     '--skip-git-repo-check', '--output-schema', schemaPath, '--model', profile.model,
+    ...(profile.reasoningEffort ? ['-c', `model_reasoning_effort=${JSON.stringify(profile.reasoningEffort)}`] : []),
     '-c', 'approval_policy="never"', '-c', 'features.shell_tool=false', '-c', 'features.hooks=false',
     '-c', 'features.apps=false', '-c', 'features.multi_agent=false', '-c', 'features.remote_plugin=false',
     '-c', 'features.goals=false', '-c', 'features.memories=false',
@@ -243,7 +253,7 @@ export async function runLocalDraft(rawProfile: LocalRuntimeProfile, rawInput: L
     await writeFile(schemaPath, JSON.stringify(draftResponseSchema), { flag: 'wx', mode: 0o600 });
     cancelled();
     const stdout = await runLocalProcess(checked.path, argumentsFor(profile, schemaPath), {
-      cwd: directory, env: localEnvironment(profile.kind), signal, timeoutMs: profile.timeoutMs,
+      cwd: directory, env: localEnvironment(profile.kind, profile.binaryPath), signal, timeoutMs: profile.timeoutMs,
       maxStdoutBytes: profile.kind === 'codex-cli' ? 4 * 1024 * 1024 : 1024 * 1024,
       input: prompt, modelInvocation: true,
     });

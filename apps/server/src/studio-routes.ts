@@ -3,12 +3,21 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { invariant } from '../../../packages/contracts/src/errors.ts';
 import { resourceId } from '../../../packages/domain/src/validation.ts';
 import { inspectLocalRuntime } from '../../../packages/runtimes/src/local.ts';
+import { discoverLocalRuntimes } from '../../../packages/runtimes/src/discovery.ts';
+import type { DiscoveredLocalRuntime } from '../../../packages/contracts/src/runtimes.ts';
 import type { RouteContext } from './routes.ts';
 import { publicStudio } from './studio-repository.ts';
 import { json, jsonBody } from './http.ts';
+let discovery: Promise<DiscoveredLocalRuntime[]> | undefined;
 export async function studioRoutes(request:IncomingMessage,response:ServerResponse,url:URL,c:RouteContext):Promise<boolean>{
   const path=url.pathname,method=request.method;
   if(path==='/api/runtimes'&&method==='GET'){json(response,c.runtimes.list());return true;}
+  if(path==='/api/runtimes/discover'&&method==='POST'){
+    // Concurrent browser requests share the bounded scan; refresh starts a new scan.
+    const pending=discovery??=discoverLocalRuntimes();
+    try{json(response,await pending);}finally{if(discovery===pending)discovery=undefined;}
+    return true;
+  }
   if(path==='/api/runtimes'&&method==='POST'){json(response,c.runtimes.save(await jsonBody(request)),201);return true;}
   const runtime=/^\/api\/runtimes\/([^/]+)$/.exec(path);if(runtime&&method==='PUT'){json(response,c.runtimes.save(await jsonBody(request),resourceId(runtime[1])));return true;}
   const inspect=/^\/api\/runtimes\/([^/]+)\/inspect$/.exec(path);if(inspect&&method==='POST'){json(response,await inspectLocalRuntime(c.runtimes.get(resourceId(inspect[1]))));return true;}

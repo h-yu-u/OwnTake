@@ -1,4 +1,4 @@
-import type { LocalRuntimeInput, LocalRuntimeInspection, LocalRuntimeProfile, Reservation, StudioCreateRequest, StudioOperation } from '../types.ts';
+import type { DiscoveredLocalRuntime, LocalRuntimeInput, LocalRuntimeInspection, LocalRuntimeProfile, Reservation, StudioCreateRequest, StudioOperation } from '../types.ts';
 import { request } from './api.ts';
 
 export type RuntimeSettingsInput = LocalRuntimeInput & { trustAcknowledged: boolean };
@@ -6,6 +6,7 @@ export interface SettlementInput { id: string; actualAmount: number; currency: R
 function write<T>(path: string, body: unknown, method = 'POST'): Promise<T> { return request<T>(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
 export const studioApi = {
   runtimes: () => request<LocalRuntimeProfile[]>('/runtimes'),
+  discoverRuntimes: () => write<DiscoveredLocalRuntime[]>('/runtimes/discover', {}),
   createRuntime: (input: RuntimeSettingsInput) => write<LocalRuntimeProfile>('/runtimes', input),
   updateRuntime: (id: string, input: RuntimeSettingsInput) => write<LocalRuntimeProfile>(`/runtimes/${encodeURIComponent(id)}`, input, 'PUT'),
   inspectRuntime: (id: string) => write<LocalRuntimeInspection>(`/runtimes/${encodeURIComponent(id)}/inspect`, {}),

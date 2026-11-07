@@ -700,6 +700,12 @@ main:focus { outline: none; }
 .frame-issue .heading-line > span { color: var(--faint); font-size: 10px; }
 .frame-issue p { color: var(--muted); font-size: 12px; margin-top: 9px; }
 .runtime-actions { display: flex; flex-wrap: wrap; gap: 9px; justify-content: flex-end; }
+.runtime-detection-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; color: var(--muted); font-size: 12px; }
+.runtime-detection-line [role="status"] { display: flex; align-items: center; gap: 8px; }
+.runtime-detected-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -8px 0 18px; }
+.runtime-detected-summary code { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.runtime-advanced { margin: 18px 0; }
+.runtime-manual-button { margin-bottom: 18px; }
 .runtime-inspection { background: #11170e; padding: 17px; border-radius: 8px; margin: 0 0 19px; }
 .runtime-inspection .heading-line { flex-wrap: wrap; margin-bottom: 9px; }
 .runtime-inspection .heading-line > span { color: var(--faint); font-size: 11px; }

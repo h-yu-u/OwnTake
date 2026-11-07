@@ -50,6 +50,34 @@ test('local runtime profiles default to disabled and reject extra command, env, 
   }
 });
 
+test('reasoning effort remains optional for old profiles and rejects unknown or injected levels', () => {
+  const input = { label: '本机草稿', kind: 'codex-cli', binaryPath: '/usr/local/bin/codex', model: 'configured-model' };
+  assert.equal(validateLocalRuntime(input, identity).reasoningEffort, undefined);
+  assert.equal(validateLocalRuntime({ ...input, reasoningEffort: 'max' }, identity).reasoningEffort, 'max');
+  for (const reasoningEffort of ['ultra', 'ultracode', '--yolo', 'high\n--tools', 'unknown', 3, null]) assert.throws(() => validateLocalRuntime({ ...input, reasoningEffort }, identity), { classification: 'preflight_failed' });
+  assert.throws(() => validateLocalRuntime({ ...input, kind: 'claude-code', reasoningEffort: 'none' }, identity));
+});
+
+test('explicit reasoning is passed as a fixed Codex config or Claude flag; defaults omit the override', async () => {
+  for (const kind of ['codex-cli', 'claude-code'] as const) await withFixture(kind, async ({ profile, workDir, logs, settings }) => {
+    await runLocalDraft({ ...profile, reasoningEffort: 'high' }, { taskId: 'effort_explicit', workDir, brief: '测试强度传递', shots: [] });
+    await runLocalDraft(profile, { taskId: 'effort_default', workDir, brief: '保留模型默认', shots: [] });
+    const runs = (await logs()).filter(entry => entry.run);
+    assert.equal(runs.length, 2);
+    if (kind === 'codex-cli') {
+      const position = runs[0].args.indexOf('model_reasoning_effort="high"');
+      assert(position > 0); assert.equal(runs[0].args[position - 1], '-c');
+      assert(!runs[1].args.some((arg: string) => arg.startsWith('model_reasoning_effort=')));
+    } else {
+      assert.equal(runs[0].args[runs[0].args.indexOf('--effort') + 1], 'high');
+      assert(!runs[1].args.includes('--effort'));
+      await settings({ missingFlag: '--effort' });
+      await assert.rejects(runLocalDraft({ ...profile, reasoningEffort: 'high' }, { taskId: 'effort_unsupported', workDir, brief: '不可静默降级', shots: [] }), safeError('preflight_failed', 'RUNTIME_INCOMPATIBLE'));
+      assert.equal((await logs()).filter(entry => entry.run).length, 2);
+    }
+  });
+});
+
 test('inspection runs only version/help, reports compatibility and never claims authentication', async () => {
   for (const kind of ['claude-code', 'codex-cli'] as const) await withFixture(kind, async ({ profile, logs, settings }) => {
     const available = await inspectLocalRuntime({ ...profile, enabled: false });

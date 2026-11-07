@@ -5,6 +5,7 @@ import type { Artifact, BoardSnapshot, CallRecord, GenerationRecord, LocalRuntim
 import { budgetUsed, reservationValid, unknownReservations } from '../lib/budget.ts';
 import { activeShots } from '../lib/storyboard.ts';
 import { speechProblems, studioKindLabels } from '../lib/studio.ts';
+import { reasoningEffortLabels } from '../lib/runtime.ts';
 import BudgetReservation from './BudgetReservation.vue';
 import MediaPreview from './MediaPreview.vue';
 
@@ -68,7 +69,7 @@ function submit() {
       <p class="dialog-intro">{{ kind === 'tts' ? '文字与风格指令将发送到所选配音连接，结果作为新的 WAV 素材保存。' : kind === 'frame_review' ? '审核指定候选的少量画面，报告保留原候选视觉版本，不替代人工复核。' : '本机 CLI 基于已保存简报与分镜返回草稿，你随后决定接受哪些变更。' }}</p>
       <NFormItem :label="kind === 'runtime_draft' ? '已启用的本机 CLI' : '模型连接'"><NSelect aria-label="目标连接" :input-props="{ 'aria-label': '目标连接' }" v-model:value="targetId" :options="targetOptions" :disabled="disabled" placeholder="选择匹配的目标" /></NFormItem>
       <NAlert v-if="!targetOptions.length" type="info" :show-icon="false" class="draft-alert">{{ kind === 'runtime_draft' ? '尚无已启用的本机 CLI。' : kind === 'tts' ? '尚无声明语音能力的配音连接。' : '尚无声明图片输入与结构化输出能力的审核连接。' }}<NButton text type="primary" @click="emit('settings')">去设置</NButton></NAlert>
-      <div v-if="target" class="reasoning-target"><div class="heading-line"><strong>{{ target.model }}</strong><NTag size="small" type="warning" :bordered="false">{{ kind === 'runtime_draft' ? '认证未检查' : '能力为用户声明 · 尚未实接验证' }}</NTag></div><code>{{ kind === 'runtime_draft' ? runtime?.binaryPath : provider?.baseUrl }}</code><p>{{ target.label }} · {{ target.timeoutMs / 1000 }} 秒超时<span v-if="kind === 'frame_review' && provider"> · 最多 {{ provider.maxOutputTokens }} 输出 tokens</span></p></div>
+      <div v-if="target" class="reasoning-target"><div class="heading-line"><strong>{{ target.model }}</strong><NTag size="small" type="warning" :bordered="false">{{ kind === 'runtime_draft' ? '认证未检查' : '能力为用户声明 · 尚未实接验证' }}</NTag></div><code>{{ kind === 'runtime_draft' ? runtime?.binaryPath : provider?.baseUrl }}</code><p>{{ target.label }} · {{ target.timeoutMs / 1000 }} 秒超时<span v-if="runtime && kind === 'runtime_draft'"> · 推理：{{ runtime.reasoningEffort ? reasoningEffortLabels[runtime.reasoningEffort] : '模型默认' }}</span><span v-if="kind === 'frame_review' && provider"> · 最多 {{ provider.maxOutputTokens }} 输出 tokens</span></p></div>
       <template v-if="kind === 'tts'">
         <NFormItem label="配音文字"><NInput :input-props="{ 'aria-label': '配音文字' }" v-model:value="speech.text" type="textarea" :autosize="{ minRows: 5, maxRows: 12 }" :disabled="disabled" placeholder="写下希望朗读的内容。生成前会逐字使用这里的文字。" /></NFormItem>
         <p class="form-note">{{ speech.text.length }} 字符<span v-if="provider?.capabilities.speech"> / 声明上限 {{ provider.capabilities.speech.maxInputChars }}</span>。文本不会被静默截断。</p>

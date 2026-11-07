@@ -21,9 +21,17 @@ if (args.includes('--version')) {
 }
 if (args.includes('--help')) {
   await log({ check: 'help', args });
+  if (args[0] === 'debug' && args[1] === 'models' && settings.bundledModels) {
+    process.stdout.write('--bundled\n'); process.exit(0);
+  }
   if (settings.hiddenMaxTurns && args.includes('--max-turns') && !Number.isFinite(Number(args[args.indexOf('--max-turns') + 1]))) process.exit(2);
   process.stdout.write(requiredFlags.filter(flag => flag !== settings.missingFlag && !(settings.hiddenMaxTurns && flag === '--max-turns')).map(flag => '  ' + flag + ' <value>').join('\n'));
+  if (settings.kind === 'claude-code' && settings.missingFlag !== '--effort') process.stdout.write('\n  --effort <level> (low, medium, high, xhigh, max)\n');
   process.exit(0);
+}
+if (args[0] === 'debug' && args[1] === 'models' && args[2] === '--bundled' && settings.bundledModels) {
+  await log({ check: 'bundled', args });
+  process.stdout.write(JSON.stringify({ models: settings.bundledModels })); process.exit(0);
 }
 
 let input = '';
