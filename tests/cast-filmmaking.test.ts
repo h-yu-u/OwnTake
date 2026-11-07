@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../packages/storage/src/store.ts';
@@ -11,6 +12,7 @@ import { CharacterRepository } from '../packages/storage/src/character-repositor
 import { ShotCastRepository } from '../packages/storage/src/shot-cast-repository.ts';
 import { AppError } from '../packages/contracts/src/errors.ts';
 import { splitScriptScenes, scriptToDraftOperations } from '../packages/domain/src/script-scenes.ts';
+import { importCharacterVisualFromArtifact } from '../apps/server/src/application/characters.ts';
 import { storyScriptToStoryboard } from '../apps/server/src/application/story-to-board.ts';
 import { compileGenerationRequest, validateGeneration } from '../packages/providers/src/generation.ts';
 import type { GenerationPlan, ProviderProfile } from '../packages/contracts/src/providers.ts';
@@ -108,4 +110,27 @@ test('image edit connector compiles frozen references into JSON without silently
   assert.equal(validateGeneration(profile,{...plan,inputMode:'text',referenceArtifactIds:[]},[]).status,'needs_replan');
   assert.throws(()=>compileGenerationRequest(profile,plan,{photo_a:'data:image/bmp;base64,'+bytes.toString('base64')}),
     (e:unknown)=>e instanceof AppError&&e.code==='EDIT_REFERENCE_FORMAT');
+});
+
+test('previously generated registered project images can become actor reference versions',async t=>{
+  const f=fixture(t),actor=f.characters.create(identity),project=f.store.createProject({name:'生成素材作品'});
+  const bytes=png(f.root),artifactId='artifact_original_frame',base=f.store.getProjectDir(project.id);
+  const folder=join(base,'assets',artifactId);
+  mkdirSync(folder,{mode:0o700});writeFileSync(join(folder,'source.png'),bytes);
+  const sha256=createHash('sha256').update(bytes).digest('hex');
+  f.store.addArtifact({
+    id:artifactId,projectId:project.id,name:'AI 生成关键帧',kind:'image',
+    relativePath:`assets/${artifactId}/source.png`,sha256,sizeBytes:bytes.length,
+    media:{kind:'image',durationMs:0,width:320,height:320,format:'png',codec:'png',hasAudio:false},
+    source:'generated',metadata:{},
+  });
+  const visual=await importCharacterVisualFromArtifact({store:f.store,characters:f.characters},actor.id,artifactId);
+  assert.equal(visual.version,1);
+  assert.equal(visual.sha256,sha256);
+  assert.deepEqual(f.characters.visualContent(actor.id,1).bytes,bytes);
+  writeFileSync(join(folder,'source.png'),Buffer.from('corrupt'),{flag:'w'});
+  await assert.rejects(
+    ()=>importCharacterVisualFromArtifact({store:f.store,characters:f.characters},actor.id,artifactId),
+    (e:unknown)=>e instanceof AppError && (e.code==='ASSET_CHANGED'||e.code==='REFERENCE_CHANGED')
+  );
 });
