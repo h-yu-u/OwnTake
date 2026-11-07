@@ -8,4 +8,5 @@ export type * from '../../../packages/contracts/src/studio-provider.ts';
 export type * from '../../../packages/contracts/src/runtimes.ts';
 export type * from '../../../packages/contracts/src/desktop.ts';
 export type * from '../../../packages/contracts/src/story.ts';
+export type * from '../../../packages/contracts/src/discovery.ts';
 export type ViewId = 'stories' | 'projects' | 'storyboard' | 'workbench' | 'studio' | 'jobs' | 'export' | 'settings';
