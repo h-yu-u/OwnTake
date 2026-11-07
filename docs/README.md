@@ -15,12 +15,13 @@ OwnTake 是一个在自己电脑上运行的 AI 短片工作台：从创意和�
 | [交互原型说明](prototype/README.md) | 启动方式、可点击路径、演示数据及限制 | 先体验界面 |
 | [原型入口](prototype/index.html) | 无外部依赖的 HTML / CSS / JavaScript 原型 | 本地打开后操作 |
 | [技术架构](architecture.md) | 进程边界、数据模型、适配合同、任务状态、API、媒体管线与恢复 | 开始实现前阅读 |
+| [Fastify 迁移](validation/fastify.md) | HTTP / 应用分层、配置、插件、兼容性和实际验证 | 扩展或维护服务端 |
 | [实施总计划](implementation-plan.md) | 阶段依赖、每阶段出口与 MVP 边界 | 安排开发顺序 |
 | [资料与设计依据](sources.md) | 官方资料、供应商能力核验原则及设计假设 | 接入真实模型时查阅 |
 
 ## 架构结论
 
-**先做本地 Web：Vue 3 + TypeScript + Vite 前端，Node.js + TypeScript 本地服务，SQLite 与本地项目文件，FFmpeg / ffprobe 处理媒体。**
+**本地 Web 使用 Vue 3 + TypeScript + Vite 前端，Node.js + TypeScript + Fastify 本地服务，SQLite 与本地项目文件，FFmpeg / ffprobe 处理媒体。**
 
 浏览器提供界面，Node 服务负责文件、模型调用、CLI 子进程和后台任务。关闭网页不代表任务取消；停止本地服务或电脑休眠则按任务类型进入恢复流程。安装与依赖版本已在 package-lock.json 锁定；正式入口与静态原型保持分离。
 

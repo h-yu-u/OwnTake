@@ -14,16 +14,27 @@
     "start": "node apps/server/src/main.ts",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.desktop.json",
     "test": "node scripts/test.mjs",
-    "check": "npm run typecheck && npm test && npm run build:desktop",
+    "check": "npm run typecheck && npm test && npm run build:desktop && npm run smoke:service",
     "backup": "node scripts/backup.ts",
     "build:desktop": "npm run build && node scripts/build-desktop.mjs",
     "desktop": "npm run build:desktop && electron .",
     "package:desktop": "npm run build:desktop && electron-builder",
     "package:mac": "npm run build:desktop && electron-builder --mac zip",
-    "smoke:desktop": "node scripts/smoke-desktop.mjs"
+    "smoke:desktop": "node scripts/smoke-desktop.mjs",
+    "smoke:service": "node scripts/smoke-service.mjs"
   },
   "dependencies": {
+    "@fastify/cookie": "11.1.5",
+    "@fastify/csrf-protection": "8.0.2",
+    "@fastify/helmet": "13.2.0",
+    "@fastify/session": "11.1.6",
+    "@fastify/sse": "0.6.1",
+    "@fastify/static": "10.1.10",
+    "@fastify/type-provider-typebox": "6.3.0",
+    "fastify": "5.12.8",
+    "lru-cache": "11.5.3",
     "naive-ui": "2.45.3",
+    "typebox": "1.4.5",
     "vue": "3.5.45"
   },
   "devDependencies": {
