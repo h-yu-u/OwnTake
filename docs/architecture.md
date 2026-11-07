@@ -1,12 +1,12 @@
 # OwnTake 技术架构
 
-> 设计基线 v0.1 · 2026-11-06 · **规划态，尚未实现**。本文约定正式应用的边界、数据和执行语义；`docs/prototype/` 是独立的静态交互演示，不代表后台能力已交付。
+> 设计基线 v0.1 · 更新于 2026-11-07。本文约定正式应用的边界、数据和执行语义；P1–P5 已有实现，各阶段交付范围和验证限制见 `docs/validation/`。HTTP 层现使用 Fastify，具体迁移记录见 [Fastify 说明](validation/fastify.md)。`docs/prototype/` 仍是独立的静态交互演示。
 >
 > 配套阅读：[产品设计](product-design.md) · [实施计划](implementation-plan.md) · [资料与设计依据](sources.md)。本文中的具体库版本、模型 ID、价格及账户能力，需要在实施对应阶段核验并锁定。
 
 ## 1. 架构结论与适用范围
 
-**先实现本地 Web：Vue 3 + TypeScript + Vite 界面，Node.js + TypeScript 本地服务，SQLite 存业务状态，本地目录存媒体，FFmpeg / ffprobe 处理媒体。** 浏览器只负责交互；后台任务、外部 API、凭据、文件和子进程由本地服务管理。
+**本地 Web 使用 Vue 3 + TypeScript + Vite 界面，Node.js + TypeScript + Fastify 本地服务，SQLite 存业务状态，本地目录存媒体，FFmpeg / ffprobe 处理媒体。** 浏览器只负责交互；后台任务、外部 API、凭据、文件和子进程由本地服务管理。
 
 | 决策 | 原因与边界 |
 | --- | --- |
@@ -44,18 +44,25 @@ flowchart TB
 
 开发时 Vite 将 `/api` 和事件流代理到本地服务，生产构建由 Node 服务提供静态文件，尽量保持浏览器同源访问。默认仅监听 `127.0.0.1`。服务启动不依赖浏览器连接，刷新、关闭标签页或 SSE 断开都不表示取消任务。
 
-### 建议代码结构
+### 当前代码结构与依赖方向
 
-以下是 P1 起逐步建立的目录，不属于本次已交付代码：
+HTTP 适配、应用用例和资源所有权分别组织；既有 Repository 与 Runner 保持独立，沿用持久化与恢复合同：
 
 ```text
 apps/
   web/src/                  Vue 页面、组件、状态与 API 客户端
+  desktop/src/              Electron 主进程、受限桥接、核心子进程入口
   server/src/
-    http/                   路由、认证、SSE、资源流
+    app.ts                  Fastify 应用装配、buildApp 与 startServer
+    http/routes/            按业务模块组织的路由、媒体、SSE
+    http/schemas/           TypeBox 请求 Schema 与错误码映射
+    http/plugins/           来源、会话、CSRF、安全头、错误与文件传输
     application/            用例与事务边界
-    scheduler/              jobs 认领、恢复、并发限制
-    bootstrap/              配置、迁移、启动与关闭
+    bootstrap/              数据目录、SQLite、Runner 的资源所有权
+    config/                 服务配置与 HTTP / 会话 / 媒体 / 时间线策略
+    *-repository.ts         业务持久化与领域规则协调
+    *-runner.ts             持久任务执行、恢复与取消
+    scheduler.ts            本地导出任务调度
 packages/
   contracts/                DTO、运行时 Schema、错误码、事件合同
   domain/                   状态机、依赖失效、策略与纯函数
@@ -66,7 +73,9 @@ packages/
 docs/                       产品、架构、阶段与原型
 ```
 
-HTTP 框架与 SQLite 驱动在 P1 选择并锁定。不得让业务层依赖具体框架请求对象或供应商 SDK 类型。核心输入输出需要运行时校验，不能只依靠 TypeScript 静态类型。
+Fastify 与插件版本由 lockfile 锁定；SQLite 使用 Node 内置驱动。HTTP 路由负责请求 Schema、状态码和响应头，复合操作交给 `application/`。应用用例接收普通参数与按需收窄的资源依赖，不引用 Fastify 请求 / 响应类型；领域校验保持纯函数。HTTP Schema 检查数据形状，领域层继续校验版本、预算、资产归属及状态转换。
+
+`buildApp()` 创建可注入请求的应用，不监听端口、不启动后台任务；`startServer()` 在监听成功后启动恢复与调度。`bootstrap/core.ts` 独占数据库和实例锁，统一管理 Runner 停止与释放。HTTP 关闭时结束 SSE、取消上传，并等待上传清理及已开始的异步处理函数完成，最后释放数据库和锁；启动失败与重复关闭走同一释放路径。Web 和 Electron 使用同一个入口。
 
 可以采用 `reduce(state, event) -> { nextState, commands }` 组织关键状态转换：纯函数决定结果，应用服务在事务内保存状态与待执行命令，调度器在事务外执行 I/O。这里不建设完整事件溯源平台；SQLite 当前业务记录是权威状态，`events` 用于通知与审计。
 
