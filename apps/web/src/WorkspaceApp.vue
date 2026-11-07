@@ -210,6 +210,23 @@ async function addStudioAudio(id: string) {
   await nextTick(); document.getElementById('audio-tracks')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+async function onStoryDraftCreated(projectId: string) {
+  const ok=await perform(async()=>{
+    await workspace.initialize();
+    await workspace.selectProject(projectId);
+    await storyboard.refresh();
+    reviewRevision.value++;
+    view.value='storyboard';
+  }, '分镜草稿已建立，等待逐项审阅');
+  if (!ok) view.value='stories';
+}
+async function onShotCastBound() {
+  generationDialog.value=false;
+  await perform(async()=>{
+    await storyboard.refresh();
+    await workspace.refreshProject();
+  }, '已更新镜头出场人物，请重新审阅生成计划');
+}
 async function onStoryProjectCreated(id: string) {
   await perform(async () => { await workspace.initialize(); await workspace.selectProject(id); view.value = 'storyboard'; }, '项目已建立，可开始制作分镜');
 }
@@ -240,7 +257,7 @@ async function revealArtifact(id: string) {
       <div v-if="!initialized" class="initial-loading"><NSpin size="large" /><p>正在打开你的片场…</p></div>
       <template v-else>
         <CharacterLibraryView v-if="view === 'characters'" :projects="projects" :current-project-id="snapshot?.project.id" />
-        <StoryLibraryView v-else-if="view === 'stories'" @project-created="onStoryProjectCreated" />
+        <StoryLibraryView v-else-if="view === 'stories'" @project-created="onStoryProjectCreated" @storyboard-draft="onStoryDraftCreated" />
         <ProjectsView v-else-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
         <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="desktop.refresh" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>
@@ -256,7 +273,7 @@ async function revealArtifact(id: string) {
       <ProjectDetailsDialog v-model:show="projectDetailsDialog" :project="snapshot.project" :disabled="disabled" @save="saveProjectDetails" />
       <DraftComposer v-model:show="draftComposer" :shots="shots" :artifacts="snapshot.artifacts" :disabled="disabled" @create="createDraft" />
       <ReasoningDialog v-model:show="reasoningDialog" :project="snapshot.project" :shots="shots" :board-revision="board?.revision || 0" :providers="providers" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="requestReasoning" @settings="reasoningDialog = false; view = 'settings'" />
-      <GenerationDialog v-if="generationShot" v-model:show="generationDialog" :shot="generationShot" :project="snapshot.project" :providers="providers" :artifacts="snapshot.artifacts" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="submitGeneration" @settings="generationDialog = false; view = 'settings'" />
+      <GenerationDialog v-if="generationShot" v-model:show="generationDialog" :shot="generationShot" :project="snapshot.project" :providers="providers" :artifacts="snapshot.artifacts" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="submitGeneration" @cast-bound="onShotCastBound" @characters="generationDialog = false; view = 'characters'" @settings="generationDialog = false; view = 'settings'" />
       <StudioRequestDialog v-model:show="studioDialog" :kind="studioKind" :project="snapshot.project" :board="board" :artifacts="snapshot.artifacts" :providers="providers" :runtimes="runtimes" :calls="calls" :generations="generationRecords" :studio-operations="studioOperations" :disabled="disabled" @submit="submitStudio" @settings="studioDialog = false; view = 'settings'" @details="studioDialog = false; projectDetailsDialog = true" />
     </template>
   </div>
