@@ -18,6 +18,8 @@ export function validateGenerationShape(profile: ProviderProfile, plan: Generati
     if (/^gpt-image-1(?:[.-]|$)/i.test(profile.model) && plan.ratio !== '1:1') issue('IMAGE_SIZE_UNSUPPORTED', 'ratio', '此旧版图片模型不支持精确的 16:9/9:16 尺寸；请声明并选择 1:1，或更换支持此尺寸的模型。');
   }
   if (profile.kind === 'openai-image-edits') {
+    if (/^gpt-image-1(?:[.-]|$)/i.test(profile.model) && plan.ratio !== '1:1')
+      issue('EDIT_SIZE_UNSUPPORTED','ratio','GPT Image 1.x 编辑接口不支持严格 16:9/9:16 输出，请改用 GPT Image 2.x 或 1:1。');
     if (plan.kind !== 'image' || plan.inputMode !== 'references' || plan.referenceArtifactIds.length===0)
       issue('EDIT_REFERENCES_REQUIRED', 'inputMode', '参考图编辑适配器要求至少一张参考图片，不能按纯文字生成。');
   }
