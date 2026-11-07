@@ -1,3 +1,4 @@
+import { CharacterRepository } from '../../../../packages/storage/src/character-repository.ts';
 import { StoryDiscovery } from '../../../../packages/providers/src/discovery.ts';
 import { StoryRepository } from '../../../../packages/storage/src/story-repository.ts';
 import { Store } from '../../../../packages/storage/src/index.ts';
@@ -36,6 +37,7 @@ export async function createCore(config: ServerConfig): Promise<CoreRuntime> {
     const context: ApplicationContext = {
       store,
       stories: new StoryRepository(store),
+      characters: new CharacterRepository(store),
       discovery: new StoryDiscovery(),
       board,
       providers,

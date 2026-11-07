@@ -1,3 +1,4 @@
+import type { CharacterRepository } from '../../../../packages/storage/src/character-repository.ts';
 import type { StoryDiscovery } from '../../../../packages/providers/src/discovery.ts';
 import type { StoryRepository } from '../../../../packages/storage/src/story-repository.ts';
 import type { Store } from '../../../../packages/storage/src/index.ts';
@@ -15,6 +16,7 @@ import type { StudioRunner } from '../studio-runner.ts';
 /** Resources owned by one local core. Individual use cases take only what they need. */
 export interface ApplicationContext {
   stories: StoryRepository;
+  characters: CharacterRepository;
   discovery: StoryDiscovery;
   store: Store;
   scheduler: Scheduler;
