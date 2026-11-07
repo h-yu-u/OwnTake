@@ -61,12 +61,12 @@ export class CharacterRepository {
   }
   visuals(characterId: string): CharacterVisual[] {
     this.get(characterId);
-    return this.store.db.prepare('SELECT * FROM library_character_visuals WHERE character_id=? ORDER BY version').all(characterId).map(fromVisual);
+    return this.store.db.prepare('SELECT id,character_id,version,mime,sha256,size_bytes,width,height,created_at FROM library_character_visuals WHERE character_id=? ORDER BY version').all(characterId).map(fromVisual);
   }
   visual(characterId: string, version: number): CharacterVisual {
     this.get(characterId);
     integer(version,'人物形象版本',1,Number.MAX_SAFE_INTEGER);
-    const row=this.store.db.prepare('SELECT * FROM library_character_visuals WHERE character_id=? AND version=?').get(characterId,version);
+    const row=this.store.db.prepare('SELECT id,character_id,version,mime,sha256,size_bytes,width,height,created_at FROM library_character_visuals WHERE character_id=? AND version=?').get(characterId,version);
     if (!row) throw new AppError('CHARACTER_VISUAL_NOT_FOUND','人物形象版本不存在',404);
     return fromVisual(row);
   }

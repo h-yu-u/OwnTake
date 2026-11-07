@@ -26,6 +26,7 @@ import GenerationDialog from './components/GenerationDialog.vue';
 import StudioRequestDialog from './components/StudioRequestDialog.vue';
 import StudioView from './views/StudioView.vue';
 import ProjectsView from './views/ProjectsView.vue';
+import CharacterLibraryView from './views/CharacterLibraryView.vue';
 import StoryLibraryView from './views/StoryLibraryView.vue';
 import WorkbenchView from './views/WorkbenchView.vue';
 import JobsView from './views/JobsView.vue';
@@ -47,7 +48,7 @@ const studio = useStudio(snapshot);
 const { operations: studioOperations, runtimes, busy: studioBusy, error: studioError } = studio;
 const message = useMessage();
 const dialog = useDialog();
-const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'stories', label: '故事库', icon: 'storyboard' }, { id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'studio', label: '创作工具', icon: 'studio' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
+const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'characters', label: '人物库', icon: 'projects' }, { id: 'stories', label: '故事库', icon: 'storyboard' }, { id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'studio', label: '创作工具', icon: 'studio' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
 const rememberedView = window.location.hash.slice(1);
 const view = ref<ViewId>(navigation.some(item => item.id === rememberedView) ? rememberedView as ViewId : 'projects');
 const projectDialog = ref(false);
@@ -238,7 +239,8 @@ async function revealArtifact(id: string) {
       <NAlert v-if="actionError" type="error" :show-icon="false" closable class="action-alert" @close="actionError = ''"><p class="error-details">{{ actionError }}</p></NAlert>
       <div v-if="!initialized" class="initial-loading"><NSpin size="large" /><p>正在打开你的片场…</p></div>
       <template v-else>
-        <StoryLibraryView v-if="view === 'stories'" @project-created="onStoryProjectCreated" />
+        <CharacterLibraryView v-if="view === 'characters'" :projects="projects" :current-project-id="snapshot?.project.id" />
+        <StoryLibraryView v-else-if="view === 'stories'" @project-created="onStoryProjectCreated" />
         <ProjectsView v-else-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
         <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="desktop.refresh" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>

@@ -1,3 +1,4 @@
+import { AppError } from '../../../../../packages/contracts/src/errors.ts';
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Type } from 'typebox';
@@ -38,7 +39,7 @@ export async function registerCharacterUploads(app:FastifyInstance,context:Pick<
     const upload=registerUploads(child,config.maxUploadBytes);
     child.post<VisualUpload>('/characters/:id/visuals',{schema:{params:CharacterParams}},async(request,reply)=>{
       const body=request.body;
-      if(!body?.stream)throw new Error('Expected an uploaded reference image stream');
+      if(!body?.stream)throw new AppError('EMPTY_FILE','人物参考图不能为空');
       return reply.code(201).send(await upload(body,part=>registerCharacterVisual(context,request.params.id,part.stream,part.signal)));
     });
   });

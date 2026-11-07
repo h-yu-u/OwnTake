@@ -1,6 +1,5 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import { AppError, invariant } from '../../../../packages/contracts/src/errors.ts';
 import { probe } from '../../../../packages/media/src/index.ts';
