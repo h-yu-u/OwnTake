@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ApplicationContext } from '../../application/context.ts';
 import type { ServerConfig } from '../../config.ts';
+import { registerShotCastRoutes } from './shot-cast.ts';
 import { registerCharacterRoutes } from './characters.ts';
 import { registerDiscoveryRoutes } from './discovery.ts';
 import { registerStoryRoutes } from './stories.ts';
@@ -16,6 +17,7 @@ export function registerApplicationRoutes(app: FastifyInstance, context: Applica
   registerStoryRoutes(app, context);
   registerDiscoveryRoutes(app, context);
   registerCharacterRoutes(app, context);
+  registerShotCastRoutes(app, context);
   registerProjectRoutes(app, context);
   registerStoryboardRoutes(app, context);
   registerProviderRoutes(app, context);

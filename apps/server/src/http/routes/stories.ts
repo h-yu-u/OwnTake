@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApplicationContext } from '../../application/context.ts';
+import { storyScriptToStoryboard } from '../../application/story-to-board.ts';
+import { StoryboardDraftRequest } from '../schemas/story-to-board.ts';
 import { IdParams, ProjectFromStory, ScriptInput, StoryInput, StorySearch, StoryUpdate } from '../schemas/stories.ts';
 
-export function registerStoryRoutes(fastify: FastifyInstance, { stories }: Pick<ApplicationContext, 'stories'>): void {
+export function registerStoryRoutes(fastify: FastifyInstance, { stories, board }: Pick<ApplicationContext, 'stories' | 'board'>): void {
   const app = fastify.withTypeProvider<TypeBoxTypeProvider>();
   app.get('/stories', { schema: { querystring: StorySearch } }, async request => stories.list(request.query.q ?? ''));
   app.post('/stories', { schema: { body: StoryInput } }, async (request, reply) => reply.code(201).send(stories.create(request.body)));
@@ -16,6 +18,7 @@ export function registerStoryRoutes(fastify: FastifyInstance, { stories }: Pick<
   app.get('/stories/:id/scripts', { schema: { params: IdParams } }, async request => stories.scripts(request.params.id));
   app.post('/stories/:id/scripts', { schema: { params: IdParams, body: ScriptInput } }, async (request, reply) =>
     reply.code(201).send(stories.saveScript(request.params.id, request.body.sourceVersion, request.body.text)));
+  app.post('/stories/:id/storyboard-draft',{schema:{params:IdParams,body:StoryboardDraftRequest}},async request=>storyScriptToStoryboard({stories,board},request.params.id,request.body));
   app.get('/stories/:id/projects', { schema: { params: IdParams } }, async request => stories.links(request.params.id));
   app.post('/stories/:id/projects', { schema: { params: IdParams, body: ProjectFromStory } }, async (request, reply) =>
     reply.code(201).send(stories.createProject(request.params.id, request.body.storyVersion, request.body.scriptVersion, request.body.ratio)));
