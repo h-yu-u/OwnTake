@@ -210,7 +210,8 @@ try {
   await clickVisible(page.getByRole('button',{name:'打开当前项目目录',exact:true}));
   const directory=await realpath(join(projectsDir,project.id));
   await until(()=>application.evaluate(()=>globalThis.__ownTakeSmoke.opened),v=>v.length===1,'Open project directory');
-  assert.deepEqual(await application.evaluate(()=>globalThis.__ownTakeSmoke.opened),[directory]);
+  const opened=await application.evaluate(()=>globalThis.__ownTakeSmoke.opened);
+  assert.deepEqual(await Promise.all(opened.map(path=>realpath(path))),[directory]);
   assert.deepEqual(await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.close();return{visible:w.isVisible(),destroyed:w.isDestroyed()};}),{visible:false,destroyed:false});
   const job=await api.json(`/api/projects/${project.id}/exports`,{method:'POST',expected:202,body:{timelineId:timeline.id,clientRequestId:randomUUID()}});
   const finished=await until(()=>api.json(`/api/jobs/${job.id}`),v=>['succeeded','failed','cancelled'].includes(v.status),'Hidden-window export',60000);
@@ -232,7 +233,8 @@ try {
   await player.evaluate(element=>element.pause());
   await clickVisible(page.getByRole('button',{name:'在文件夹中显示',exact:true}));
   await until(()=>application.evaluate(()=>globalThis.__ownTakeSmoke.revealed),v=>v.length===1,'Reveal artifact');
-  assert.deepEqual(await application.evaluate(()=>globalThis.__ownTakeSmoke.revealed),[await realpath(join(directory,output.relativePath))]);
+  const revealed=await application.evaluate(()=>globalThis.__ownTakeSmoke.revealed);
+  assert.deepEqual(await Promise.all(revealed.map(path=>realpath(path))),[await realpath(join(directory,output.relativePath))]);
   if(screenshot){await mkdir(dirname(screenshot),{recursive:true});await page.screenshot({path:screenshot,fullPage:true});}
   await noPaidCalls(api,project.id); await quit(dataDir,first.info.coreUrl);
   step('Normal quit, lock release and restart persistence');
