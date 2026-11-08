@@ -28,7 +28,7 @@ OwnTake 是单人、单机使用的 AI 短片工作台。从故事和剧本开�
 | Linux | Intel / AMD 64 位 | `owntake-linux-amd64.AppImage` | `owntake-linux-amd64.tar.gz` |
 | Linux | ARM64 | `owntake-linux-arm64.AppImage` | `owntake-linux-arm64.tar.gz` |
 
-从本仓库 Releases 下载，安装前核对 `SHA256SUMS`，并阅读签名状态。文件名不带版本号，版本由 tag 和清单标识；`amd64` 即 x64，不是仅支持 AMD。打开软件不需要另行下载 JSON 清单。
+从本仓库 [Releases](https://github.com/h-yu-u/OwnTake/releases) 下载，安装前核对 `SHA256SUMS`，并阅读签名状态。文件名不带版本号，版本由 tag 和清单标识；`amd64` 即 x64，不是仅支持 AMD。打开软件不需要另行下载 JSON 清单。
 
 应用包不包含 FFmpeg、ffprobe、字幕字体或模型密钥，首次使用到设置中配置。未提供发行者证书时，包标为 unsigned / ad-hoc，**不等于 Windows 可信签名或 Apple 公证**。详见[安装与发布说明](docs/operations/release.md)。
 
@@ -54,4 +54,4 @@ macOS 元数据默认在 `~/Library/Application Support/OwnTake/`，项目默认
 
 ## 参与维护
 
-先读 [AGENTS.md](AGENTS.md)、[代码规范](docs/code-standards.md) 和对应[子系统文档](docs/subsystems/README.md)。执行 `npm run check`；桌面相关改动需补原生打包冒烟。PR 写明实际验证与未验证项。版本工作流创建 Release 草稿，不自动向用户公开发布。
+先读 [AGENTS.md](AGENTS.md)、[代码规范](docs/code-standards.md) 和对应[子系统文档](docs/subsystems/README.md)。执行 `npm run check`；桌面相关改动需补原生打包冒烟。PR 写明实际验证与未验证项。维护者推送版本 tag 后，工作流在全部原生检查和远端资产核验通过后公开 Release；手动运行默认只创建草稿。

@@ -19,6 +19,7 @@ npm run dev
 
 | 命令 | 能证明什么 | 不能代替什么 |
 | --- | --- | --- |
+| `npm run check:scripts` | 无副作用地解析所有构建、发布、测试脚本，提前发现语法错误 | 脚本行为或实际 GUI 流程 |
 | `npm run check:docs` | 维护文档的本地链接/目录合同 | 文档语义和真实功能验收 |
 | `npm run test:tooling` | 命名、签名配置、架构识别、清单聚合等纯工具规则 | 实际原生安装包运行 |
 | `npm run typecheck` | 服务端、Vue、桌面的类型约束 | 行为正确性 |
@@ -27,7 +28,7 @@ npm run dev
 | `npm run smoke:desktop` | 源码构建的真实 Electron 流程 | 分发包无缺失依赖 |
 | `npm run package:desktop` + `npm run smoke:package` | 本机构建并验证解包后的应用 | 安装器 GUI 全流程/可信签名 |
 
-测试使用隔离临时目录；不要把真实作品目录设置成测试目录。`OWNTAKE_TEST_FONT` 可显式指定中文测试字体，`OWNTAKE_LOG_LEVEL=silent` 用于控制回归日志。普通测试不发起真实收费模型调用。
+测试使用隔离临时目录；不要把真实作品目录设置成测试目录。`OWNTAKE_TEST_FONT` 可显式指定中文测试字体，`OWNTAKE_LOG_LEVEL=silent` 用于控制回归日志。普通测试不发起真实收费模型调用。CI 在安装依赖和打包前运行脚本语法检查；`npm run check` 也包含该检查，覆盖不在 TypeScript 项目中的 `.mjs` 入口。
 
 ## 原生打包
 

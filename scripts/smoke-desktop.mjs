@@ -85,6 +85,12 @@ async function navigate(page,label) {
   await clickVisible(button);
   await until(()=>button.getAttribute('aria-current'),value=>value==='page',`${label} navigation selected`);
 }
+async function settingsTab(page,label) {
+  const tab=page.getByRole('tab',{name:label,exact:true});
+  await clickVisible(tab);
+  await until(()=>tab.getAttribute('aria-selected'),value=>value==='true',`${label} settings selected`);
+  await page.getByRole('tabpanel',{name:label,exact:true}).waitFor({state:'visible'});
+}
 async function session(coreUrl) {
   const bootstrap=await fetch(coreUrl+'/api/session',{signal:AbortSignal.timeout(10000)});
   assert.equal(bootstrap.status,200);
@@ -160,7 +166,9 @@ try {
   assert.deepEqual(prefs,{sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,webviewTag:false,noSandbox:unsafeSandbox});
   assert.deepEqual(await page.evaluate(()=>({require:typeof window.require,process:typeof window.process,bridge:Object.keys(window.ownTakeDesktop).sort()})),{require:'undefined',process:'undefined',bridge:['choosePath','info','openProject','revealArtifact']});
   await nativeMocks(); await navigate(page,'设置');
+  await settingsTab(page,'本机工作区');
   await page.getByRole('heading',{name:'桌面工作台',exact:true}).waitFor({state:'visible'});
+  await settingsTab(page,'媒体工具');
   const oldSettings=await api.json('/api/settings');
   const ffmpegInput=page.getByRole('textbox',{name:'FFmpeg 可执行文件',exact:true});
   const originalForm=await ffmpegInput.inputValue();
@@ -174,9 +182,11 @@ try {
   const settings=await api.json('/api/settings'); assert.equal(settings.ffmpegPath,ffmpeg); assert.equal(settings.ffprobePath,ffprobe);
   await chooseFile(page,'选择字幕字体文件',null);
   assert.equal(await page.getByRole('textbox',{name:'字幕字体文件',exact:true}).inputValue(),'');
+  await settingsTab(page,'本机 CLI');
   await clickVisible(page.getByRole('button',{name:'添加本机 CLI',exact:true}));
-  await chooseFile(page,'选择本机 CLI 可执行文件',await realpath(process.execPath));
   const runtimeModal=page.locator('.provider-modal');
+  await clickVisible(runtimeModal.getByRole('button',{name:'手动添加其他安装',exact:true}));
+  await chooseFile(page,'选择本机 CLI 可执行文件',await realpath(process.execPath));
   assert.equal(await runtimeModal.getByRole('textbox',{name:'可执行文件绝对路径',exact:true}).inputValue(),await realpath(process.execPath));
   await clickVisible(runtimeModal.getByRole('button',{name:'取消',exact:true}));
   const dialogs=await application.evaluate(()=>globalThis.__ownTakeSmoke.dialogs);
@@ -248,3 +258,4 @@ try {
 finally {
   if(application){try{await application.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});await application.close();}catch{child?.kill('SIGKILL');}}
   if(temporary){if(success)await rm(temporary,{recursive:true,force:true});else console.error(`[desktop-smoke] Fixture retained: ${temporary}`);}
+}

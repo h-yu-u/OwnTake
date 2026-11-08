@@ -54,4 +54,4 @@ Closing the desktop window keeps the core running. Use the application quit comm
 
 ## Contributing
 
-Read [AGENTS.md](AGENTS.md), [code standards](docs/code-standards.md) and the relevant [subsystem](docs/subsystems/README.md). Run `npm run check`; desktop changes also require a native packaged-app smoke. Report actual commands and limitations. The release workflow creates a reviewable draft; it does not automatically publish a tag-triggered build to users.
+Read [AGENTS.md](AGENTS.md), [code standards](docs/code-standards.md) and the relevant [subsystem](docs/subsystems/README.md). Run `npm run check`; desktop changes also require a native packaged-app smoke. Report actual commands and limitations. Pushing a version tag publishes a Release after all native checks and remote asset verification pass. Manual workflow runs default to a draft.

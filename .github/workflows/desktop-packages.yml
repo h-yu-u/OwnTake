@@ -69,6 +69,7 @@ jobs:
           cache: npm
       - name: Verify native Node toolchain
         run: node -e "if(process.versions.node.split('.')[0]!=='24'||process.arch!=='${{ matrix.arch }}')process.exit(1); console.log(process.version,process.platform,process.arch)"
+      - run: npm run check:scripts
       - run: node scripts/release/prepare-font.mjs
       - run: npm ci
       - run: npm run test:tooling

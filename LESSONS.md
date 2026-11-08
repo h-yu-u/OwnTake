@@ -65,3 +65,19 @@ Durable failure-prevention rules, not a chronological activity log. Each entry e
 **Why:** Those are different promises with different acceptance conditions.
 
 **Evidence:** [documentation map](docs/README.md), [history](docs/history/README.md), [release validation boundaries](docs/operations/release.md).
+
+## Executable scripts need their own parse gate
+
+**Rule:** Parse every JavaScript build, release and smoke entry point before expensive native jobs. Do not assume the application's TypeScript check covers `.mjs` files.
+
+**Why:** A missing closing brace in the desktop smoke entry point passed application checks and then failed every operating-system job before any runtime assertion executed.
+
+**Evidence:** [script syntax gate](scripts/check-scripts.mjs), [desktop smoke](scripts/smoke-desktop.mjs), [development guide](docs/development/README.md).
+
+## An empty secret is not an absent environment variable
+
+**Rule:** Normalize blank signing inputs at the packaging boundary before loading tools that read `process.env`; use that same environment to derive signing claims and reject partial credentials.
+
+**Why:** GitHub maps missing secrets to empty strings, while electron-builder treats a defined empty certificate path as the working directory. Unsigned/ad-hoc CI builds must not accidentally attempt a certificate import.
+
+**Evidence:** [signing policy](scripts/release/config.mjs), [packaging boundary](scripts/release/package.mjs), [release regression tests](scripts/release/release.test.mjs).

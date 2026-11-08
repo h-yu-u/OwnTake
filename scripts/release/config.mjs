@@ -1,5 +1,17 @@
 /** Pure configuration, independent of CI and of electron-builder's implementation. */
+const SIGNING_ENVIRONMENT_KEYS = ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'];
+
+/** Missing GitHub secrets arrive as empty strings, not absent environment keys. */
+export function signingEnvironment(env = {}) {
+  const normalized = { ...env };
+  for (const key of SIGNING_ENVIRONMENT_KEYS) {
+    if (typeof normalized[key] === 'string' && normalized[key].trim() === '') delete normalized[key];
+  }
+  return normalized;
+}
+
 export function signingMode(target, env = {}) {
+  env = signingEnvironment(env);
   if (target.platform === 'linux') return 'unsigned';
   const certificate = Boolean(env.CSC_LINK);
   if (target.platform === 'win32') {
