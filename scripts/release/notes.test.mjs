@@ -13,7 +13,7 @@ const release = {
 test('versioned notes include all verified downloads and actual signing modes', async () => {
   const changes = await readVersionChanges(release.tag, release.version);
   const notes = formatReleaseNotes(release, changes);
-  assert.equal(formatReleaseNotes(release, changes.replace(/\n/g, '\r\n')), notes);
+  assert.equal(formatReleaseNotes(release, changes.replace(/\r?\n/g, '\r\n')), notes);
   for (const file of release.artifacts) assert.ok(notes.includes(`/v0.1.0/${file.name})`));
   assert.ok(notes.includes('ad-hoc'));
   assert.ok(notes.includes('unsigned'));
