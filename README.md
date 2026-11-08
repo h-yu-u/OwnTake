@@ -2,7 +2,7 @@
 
 把你的想法，拍成你的作品。
 
-OwnTake 是个人电脑上的 AI 短片工作台。Vue 界面、本地 Node 服务、SQLite 与本地媒体文件组成应用；FFmpeg 负责确定性媒体处理。模型和代理运行时通过独立适配器接入。
+OwnTake 是个人电脑上的 AI 短片工作台。Vue 界面、本地 Node / Fastify 服务、SQLite 与本地媒体文件组成应用；FFmpeg 负责确定性媒体处理。模型和代理运行时通过独立适配器接入。
 
 ## 本地启动
 
@@ -40,14 +40,18 @@ macOS 元数据位于 `~/Library/Application Support/OwnTake/`，项目媒体默
 
 所有 HTTP 监听限于回环地址。首次打开建立本地会话，写请求需要 CSRF 验证。请不要将该服务通过反向代理暴露到公网。
 
+`OWNTAKE_LOG_LEVEL` 控制结构化请求日志，默认 `info`，测试可设置为 `silent`。HTTP 限制、会话、缓存、上传、事件流和时间线默认值集中在 `apps/server/src/config/`；敏感凭据、请求正文及原始查询串不会写入请求日志。
+
 ## 检查与备份
 
 ```bash
 npm run check
 ```
 
-测试使用临时 SQLite、故障夹具及 FFmpeg 生成的小型媒体。不会自动调用收费模型。
+检查包含三端类型检查、全部 Node 测试、生产构建，以及从独立临时目录启动桌面服务 bundle 的冒烟检查。测试使用临时 SQLite、故障夹具及 FFmpeg 生成的小型媒体。不会自动调用收费模型。
 媒体验收需要真实中文字体：Linux 可安装 `fonts-noto-cjk`，或将 `OWNTAKE_TEST_FONT` 指向包含中文字形的字体文件；macOS 测试优先使用系统 PingFang。
+
+HTTP 分层、扩展方法和本次迁移的兼容性记录见 [Fastify 迁移说明](docs/validation/fastify.md)。真实 Electron 窗口与原生桥接另由 `npm run smoke:desktop` 检查。
 
 停止应用后，设置相同数据目录并执行：
 

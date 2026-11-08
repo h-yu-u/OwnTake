@@ -24,6 +24,7 @@ test('runtime API requires explicit trust, creates reviewable drafts, and never 
   const project=await api('/api/projects','POST',{name:'运行时集成',brief:'中文 brief with $(not-a-command)',ratio:'16:9'},201);
   const profile={label:'测试 CLI',kind:'claude-code',binaryPath:binary,model:'fixture',reasoningEffort:'high',timeoutMs:500};
   const disabled=await api<LocalRuntimeProfile>('/api/runtimes','POST',profile,201);assert.equal(disabled.enabled,false);
+  await api('/api/runtimes','POST',{...profile,reasoningEffort:'invalid'},400);
   await api(`/api/runtimes/${disabled.id}`,'PUT',{...profile,enabled:true},409);
   let runtime=await api<LocalRuntimeProfile>(`/api/runtimes/${disabled.id}`,'PUT',{...profile,enabled:true,trustAcknowledged:true});
   assert.equal(runtime.reasoningEffort,'high');

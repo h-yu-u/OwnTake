@@ -120,5 +120,28 @@ test('discovery endpoint requires a local session and CSRF before scanning or cr
   const session = await fetch(app.url + '/api/session');
   const cookie = session.headers.get('set-cookie')!.split(';')[0]!;
   assert.equal((await fetch(url, { method: 'POST', headers: { Cookie: cookie } })).status, 403);
+  const { csrfToken } = await session.json() as { csrfToken: string };
+  const codex = await install(root, 'codex-cli', { bundledModels: [{ slug: 'fixture-model' }] });
+  const claude = await install(root, 'claude-code');
+  const previousPath = process.env.PATH;
+  process.env.PATH = [codex, claude, previousPath].filter(Boolean).join(delimiter);
+  try {
+    const responses = await Promise.all([1, 2].map(() => fetch(url, {
+      method: 'POST', headers: { Cookie: cookie, 'X-CSRF-Token': csrfToken },
+    })));
+    for (const response of responses) {
+      assert.equal(response.status, 200);
+      const found = await response.json() as { binaryPath: string }[];
+      assert.deepEqual(found.map(runtime => runtime.binaryPath), [join(codex, 'codex'), join(claude, 'claude')]);
+    }
+    for (const directory of [codex, claude]) {
+      const calls = await logs(directory);
+      assert.equal(calls.filter(call => call.check === 'version').length, 1, 'concurrent requests share a scan');
+      assert(calls.every(call => !call.run));
+    }
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+  }
   assert.equal(app.runtimes.list().length, 0);
 });

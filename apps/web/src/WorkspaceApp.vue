@@ -26,6 +26,7 @@ import GenerationDialog from './components/GenerationDialog.vue';
 import StudioRequestDialog from './components/StudioRequestDialog.vue';
 import StudioView from './views/StudioView.vue';
 import ProjectsView from './views/ProjectsView.vue';
+import StoryLibraryView from './views/StoryLibraryView.vue';
 import WorkbenchView from './views/WorkbenchView.vue';
 import JobsView from './views/JobsView.vue';
 import ExportView from './views/ExportView.vue';
@@ -46,7 +47,7 @@ const studio = useStudio(snapshot);
 const { operations: studioOperations, runtimes, busy: studioBusy, error: studioError } = studio;
 const message = useMessage();
 const dialog = useDialog();
-const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'studio', label: '创作工具', icon: 'studio' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
+const navigation: { id: ViewId; label: string; icon: string }[] = [{ id: 'stories', label: '故事库', icon: 'storyboard' }, { id: 'projects', label: '作品', icon: 'projects' }, { id: 'storyboard', label: '分镜', icon: 'storyboard' }, { id: 'workbench', label: '素材剪辑', icon: 'workbench' }, { id: 'studio', label: '创作工具', icon: 'studio' }, { id: 'jobs', label: '任务', icon: 'jobs' }, { id: 'export', label: '导出', icon: 'export' }, { id: 'settings', label: '设置', icon: 'settings' }];
 const rememberedView = window.location.hash.slice(1);
 const view = ref<ViewId>(navigation.some(item => item.id === rememberedView) ? rememberedView as ViewId : 'projects');
 const projectDialog = ref(false);
@@ -208,6 +209,10 @@ async function addStudioAudio(id: string) {
   await nextTick(); document.getElementById('audio-tracks')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+async function onStoryProjectCreated(id: string) {
+  await perform(async () => { await workspace.initialize(); await workspace.selectProject(id); view.value = 'storyboard'; }, '项目已建立，可开始制作分镜');
+}
+
 async function openProjectFolder() {
   const projectId = snapshot.value?.project.id;
   if (!desktopAvailable || !projectId || openingProjectFolder.value) return;
@@ -233,7 +238,8 @@ async function revealArtifact(id: string) {
       <NAlert v-if="actionError" type="error" :show-icon="false" closable class="action-alert" @close="actionError = ''"><p class="error-details">{{ actionError }}</p></NAlert>
       <div v-if="!initialized" class="initial-loading"><NSpin size="large" /><p>正在打开你的片场…</p></div>
       <template v-else>
-        <ProjectsView v-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
+        <StoryLibraryView v-if="view === 'stories'" @project-created="onStoryProjectCreated" />
+        <ProjectsView v-else-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
         <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="desktop.refresh" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>
         <StoryboardView v-else-if="view === 'storyboard'" :snapshot="snapshot" :board="board" :shots="shots" :selected-shot="selectedShot" :selected-id="selectedId" :fields="editorFields" :editor-mode="editorMode" :editor-dirty="editorDirty" :editor-conflict="editorConflict" :editor-base-revision="editorBaseRevision" :disabled="disabled" :loading="boardLoading" :error="boardError" :calls="calls" :providers="providers" :reviews="reviews" :review-revision="reviewRevision" @update:fields="editorFields = $event" @create="createShot" @select="chooseShot" @save="perform(() => storyboard.saveShot(), '镜头已保存')" @archive="archiveShot" @move="perform(() => storyboard.moveShot($event.id, $event.direction))" @add-candidate="perform(() => storyboard.addCandidate($event), '素材已加入当前视觉版本的候选')" @select-candidate="selectCandidate" @assets="view = 'workbench'" @timeline="saveBoardTimeline" @refresh="perform(() => storyboard.refresh())" @reload-editor="reloadShot" @create-draft="draftComposer = true" @apply-draft="applyDraft" @renew-draft="renewDraft" @reasoning="openReasoning" @generate="openGeneration" @review="saveHumanReview" @details="projectDetailsDialog = true" @settle="settleCall" />
