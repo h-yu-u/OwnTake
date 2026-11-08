@@ -4,9 +4,10 @@ import { storyboardSchema } from './storyboard-schema.ts';
 import { providerSchema } from './provider-schema.ts';
 import { generationSchema } from './generation-schema.ts';
 import { studioSchema } from './studio-schema.ts';
+import { characterSchema } from './character-schema.ts';
 import { storySchema } from './story-schema.ts';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 const schema = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -68,6 +69,7 @@ export function initializeSchema(db: DatabaseSync): void {
     if (current < 4) db.exec(studioSchema);
     if (current < 5) db.exec(storySchema);
     if (current < 6) db.exec("CREATE UNIQUE INDEX IF NOT EXISTS library_story_source_unique ON library_stories(json_extract(source_json,'$.url')) WHERE json_extract(source_json,'$.url') != ''");
+    if (current < 7) db.exec(characterSchema);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {

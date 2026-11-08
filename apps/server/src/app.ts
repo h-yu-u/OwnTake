@@ -15,6 +15,7 @@ import { registerOriginPolicy } from './http/plugins/origin.ts';
 import { bootstrapSession, protectApi, registerSecurity } from './http/plugins/security.ts';
 import { registerStaticFiles } from './http/plugins/static.ts';
 import { registerApplicationRoutes } from './http/routes/index.ts';
+import { registerCharacterUploads } from './http/routes/characters.ts';
 import { registerMediaRoutes } from './http/routes/media.ts';
 import { registerEventRoutes } from './http/routes/events.ts';
 
@@ -72,6 +73,7 @@ async function createApplication(overrides: Partial<ServerConfig>) {
         api.setNotFoundHandler(() => { throw new AppError('NOT_FOUND', '接口不存在', 404); });
         await registerApplicationRoutes(api, core.context, config);
         await registerMediaRoutes(api, core.context, config);
+        await registerCharacterUploads(api, core.context, config);
         await registerEventRoutes(api, core.context, config);
         // Explicit API fallbacks outrank the web asset wildcard and inherit auth.
         const missing = () => { throw new AppError('NOT_FOUND', '接口不存在', 404); };

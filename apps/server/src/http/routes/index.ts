@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ApplicationContext } from '../../application/context.ts';
 import type { ServerConfig } from '../../config.ts';
+import { registerCharacterRoutes } from './characters.ts';
 import { registerDiscoveryRoutes } from './discovery.ts';
 import { registerStoryRoutes } from './stories.ts';
 import { registerProjectRoutes } from './projects.ts';
@@ -14,6 +15,7 @@ import { registerSystemRoutes } from './system.ts';
 export function registerApplicationRoutes(app: FastifyInstance, context: ApplicationContext, config: ServerConfig): void {
   registerStoryRoutes(app, context);
   registerDiscoveryRoutes(app, context);
+  registerCharacterRoutes(app, context);
   registerProjectRoutes(app, context);
   registerStoryboardRoutes(app, context);
   registerProviderRoutes(app, context);
