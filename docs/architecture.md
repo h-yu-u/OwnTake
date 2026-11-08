@@ -610,3 +610,15 @@ Electron 应复用 Vue 界面和 Node 领域 / 调度代码，以受限 IPC 或�
 `apps/desktop` 使用 Electron 主进程与受限 preload，业务核心经 utilityProcess 运行在内置 Node。桌面复用现有 HTTP 会话、CSRF、SQLite、版本与恢复合同；核心从随机回环端口报告就绪，主进程不通过扫描端口接管未知服务。窗口关闭继续后台，明确退出才有序停止；数据目录互斥锁防止 Web 和桌面运行重复调度器。
 
 原生桥限于应用信息、工具 / 字体 / CLI 文件选择、项目目录打开和 Artifact 定位。所有调用校验当前窗口主框架与精确 origin，资源路径由核心从项目 / Artifact ID 解析。数据库迁移前新增一致性元数据快照；该快照保留数据库 BLOB，但不替代包含媒体的全量备份。具体实现与验证边界见 [P5 记录](validation/p5.md)。
+
+## P6–P9 架构增量：全球创作资产与项目实例分离
+
+故事和虚拟演员是 **全局创作资产**，不绑定具体作品。故事对应不可变 StoryVersion 和 ScriptVersion；转作品时通过 StoryProjectLink 记录确定版本，不会因为后续编辑故事而修改历史作品。
+
+人物的 **CharacterVisual** 在 SQLite BLOB 中储存（每图 16 MiB），以内容 SHA-256 验证、按版本锁定，并纳入现有 SQLite 备份、迁移前快照与恢复。CharacterLook 关联特定视觉版本；ProjectRole 只能绑定对应项目中的独立 Artifact 拷贝。ShotCastBinding 关联镜头与项目演员，在同一 SQLite 同步事务中更新镜头引用和版本，杜绝跨项目直接引用全局图片路径。
+
+故事外部检索由固定 HTTPS 目标的 Provider 实现，应用不代理用户任意 URL，不抓取第三方全文；未经授权的故事只能保存为灵感。凭据来自运行环境，不进入 Web、日志、项目备份。出于安全与版权限制，故事来源及改编许可需要独立显式记录。
+
+剧情创作流程使用确定性脚本段落提取生成 **待审阅** 的分镜 DraftOperation，而不是直接改变当前镜头；用户可继续使用既有付费推理流程进一步改写。人物参照镜头中记录项目素材的身份，生成计划与任务存储冻结当次角色引用（ID、visualVersion、lookId、artifactId）。模型适配器显式区分 `openai-images`（文生图）与 `openai-image-edits`（参考图编辑 JSON API）；对不支持的能力拒绝提交，不允许默默退化为文本。现有 Ark 视频首帧及参考图策略继续保留，未知付费提交不自动再次发送。
+
+这些扩展不增加微服务、独立图片数据库、外部队列或 RAG 平台；沿用已有的 Fastify HTTP、应用用例、领域校验、SQLite 仓储与供应商适配层。文字/视觉的一致性最终需要人工审核，不能从参考图输入推断最终输出已保持身份一致。

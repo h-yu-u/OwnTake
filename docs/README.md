@@ -3,7 +3,7 @@
 > 把你的想法，拍成你的作品。
 >
 > **设计基线 v0.1 · 2026-11-06**  
-> 此目录保留产品设计、架构和 P0 可点击原型。正式应用现已实现 P1–P5；运行方式见[仓库 README](../README.md)，实际验证见 [P1](validation/p1.md) / [P2](validation/p2.md) / [P3](validation/p3.md) / [P4](validation/p4.md) / [P5](validation/p5.md)。原型中的生成、检查、费用和导出仍仅为演示。
+> 此目录保留产品设计、架构和 P0 可点击原型。正式应用的创作底座已实现 P1–P5，P6–P9 扩展位于分阶段 PR 中；运行方式见[仓库 README](../README.md)，实际验证见 [P1](validation/p1.md) / [P2](validation/p2.md) / [P3](validation/p3.md) / [P4](validation/p4.md) / [P5](validation/p5.md)。原型中的生成、检查、费用和导出仍仅为演示。
 
 OwnTake 是一个在自己电脑上运行的 AI 短片工作台：从创意和脚本出发，以分镜为单位组织素材、模型生成、候选版本、审核和剪辑，最终导出视频。首个目标是单人、单机、macOS 自用。
 
@@ -47,6 +47,10 @@ CC / Codex 的运行时职责与模型 API 分开设计。镜头提出能力需�
 | [P3 · 生成闭环 / 自用 MVP](phases/03-generation-mvp.md) | 图片 / 视频接入与可靠任务 | 生成、恢复、核对、选择版本并导出；未知提交先核对，避免重复计费 |
 | [P4 · 精剪与运行时扩展](phases/04-editing-and-runtimes.md) | 音频、剪辑、语义检查与可选 Agent Runtime | 改善反复创作体验，按需接入 CC / Codex |
 | [P5 · 可选桌面封装](phases/05-optional-desktop.md) | Electron 启动与系统体验 | 复用已有服务和前端，通过桌面入口启动 |
+| [P6 · 故事资产库](phases/06-story-library.md) | 版本化故事、剧本与作品关联 | 不覆写历史剧本，直接创作作品 |
+| [P7 · 外部发现](phases/07-story-discovery.md) | 官方授权检索与手动来源 | 灵感来源可追溯，未授权内容不能直接改编 |
+| [P8 · 人物资产库](phases/08-character-library.md) | 虚拟演员与视觉/造型版本 | 同一人物多作品复用锁定形象 |
+| [P9 · 剧本与人物闭环](phases/09-cast-driven-filmmaking.md) | 剧本转草稿、人物镜头绑定、参考图编辑 | 每个镜头显式复用锁定人物素材和版本 |
 
 P1–P3 已包含各自必需的持久化与恢复，不能把重复扣费防护、文件完整性或版本隔离推迟到 P4。P5 已按本次完成全部阶段的授权实现；桌面与本地 Web 共享核心，使用时可选择任一入口。真实供应商与用户目标机器的验收仍独立记录。
 

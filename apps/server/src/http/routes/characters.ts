@@ -5,10 +5,10 @@ import { Type } from 'typebox';
 import type { ApplicationContext } from '../../application/context.ts';
 import type { ServerConfig } from '../../config.ts';
 import type { AssetUpload } from '../../application/assets.ts';
-import { registerCharacterVisual } from '../../application/characters.ts';
+import { importCharacterVisualFromArtifact, registerCharacterVisual } from '../../application/characters.ts';
 import { registerUploads } from '../plugins/uploads.ts';
 import { IdParams } from '../schemas/common.ts';
-import { CharacterInput, CharacterParams, CharacterSearch, CharacterUpdate, LookInput, ProjectRoleInput, VisualParams } from '../schemas/characters.ts';
+import { CharacterInput, CharacterParams, CharacterSearch, CharacterUpdate, LookInput, ProjectRoleInput, VisualFromArtifact, VisualParams } from '../schemas/characters.ts';
 
 export function registerCharacterRoutes(fastify:FastifyInstance,context:Pick<ApplicationContext,'store'|'characters'>):void {
   const app=fastify.withTypeProvider<TypeBoxTypeProvider>();
@@ -24,6 +24,8 @@ export function registerCharacterRoutes(fastify:FastifyInstance,context:Pick<App
     const {visual,bytes}=context.characters.visualContent(request.params.id,request.params.version);
     return reply.type(visual.mime).header('Cache-Control','private, max-age=31536000, immutable').send(bytes);
   });
+  app.post('/characters/:id/visuals/from-artifact',{schema:{params:CharacterParams,body:VisualFromArtifact}},
+    async(request,reply)=>reply.code(201).send(await importCharacterVisualFromArtifact(context,request.params.id,request.body.artifactId)));
   app.get('/characters/:id/looks',{schema:{params:CharacterParams}},async request=>context.characters.looks(request.params.id));
   app.post('/characters/:id/looks',{schema:{params:CharacterParams,body:LookInput}},async(request,reply)=>{
     return reply.code(201).send(context.characters.addLook(request.params.id,request.body));

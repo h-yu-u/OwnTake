@@ -18,7 +18,7 @@ export function parseGenerationPlan(value: unknown): GenerationPlan {
 export function validateAndCompile(value: ProviderProfile, rawPlan: GenerationPlan): PlanValidationResult {
   const profile = validateProfile(value), plan = parseGenerationPlan(rawPlan), issues: CapabilityIssue[] = [];
   const issue = (code: string, field: string, message: string): void => { issues.push({ code, field, message }); };
-  if (profile.kind !== (plan.kind === 'image' ? 'openai-images' : 'ark-video')) issue('OUTPUT_KIND_UNSUPPORTED', 'kind', '所选连接不支持这类媒体输出，请选择对应适配器。');
+  if ((plan.kind === 'image' && profile.kind !== 'openai-images' && profile.kind !== 'openai-image-edits') || (plan.kind === 'video' && profile.kind !== 'ark-video')) issue('OUTPUT_KIND_UNSUPPORTED', 'kind', '所选连接不支持这类媒体输出，请选择对应适配器。');
   if (!profile.capabilities.inputModes.includes(plan.inputMode)) issue('INPUT_MODE_UNSUPPORTED', 'inputMode', `当前连接未声明 ${plan.inputMode} 能力；原始参考不会自动丢弃。`);
   if (!profile.capabilities.ratios.includes(plan.ratio)) issue('RATIO_UNSUPPORTED', 'ratio', '当前连接未声明此画幅，请选择支持的画幅或更换连接。');
   if (plan.kind === 'video' && (plan.durationSec === undefined || !profile.capabilities.durationsSec.includes(plan.durationSec))) issue('DURATION_UNSUPPORTED', 'durationSec', '视频时长必须匹配连接声明的时长选项。');

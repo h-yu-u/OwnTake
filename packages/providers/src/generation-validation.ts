@@ -17,6 +17,12 @@ export function validateGenerationShape(profile: ProviderProfile, plan: Generati
     if (/^dall-e(?:-|$)/i.test(profile.model)) issue('IMAGE_PROTOCOL_UNSUPPORTED', 'model', '当前适配器使用 GPT Image 的 PNG/base64 协议，不支持旧版 DALL·E 参数合同。');
     if (/^gpt-image-1(?:[.-]|$)/i.test(profile.model) && plan.ratio !== '1:1') issue('IMAGE_SIZE_UNSUPPORTED', 'ratio', '此旧版图片模型不支持精确的 16:9/9:16 尺寸；请声明并选择 1:1，或更换支持此尺寸的模型。');
   }
+  if (profile.kind === 'openai-image-edits') {
+    if (/^gpt-image-1(?:[.-]|$)/i.test(profile.model) && plan.ratio !== '1:1')
+      issue('EDIT_SIZE_UNSUPPORTED','ratio','GPT Image 1.x 编辑接口不支持严格 16:9/9:16 输出，请改用 GPT Image 2.x 或 1:1。');
+    if (plan.kind !== 'image' || plan.inputMode !== 'references' || plan.referenceArtifactIds.length===0)
+      issue('EDIT_REFERENCES_REQUIRED', 'inputMode', '参考图编辑适配器要求至少一张参考图片，不能按纯文字生成。');
+  }
   if (profile.kind === 'ark-video') {
     if (!Number.isSafeInteger(plan.durationSec) || plan.durationSec! < 2 || plan.durationSec! > 30) issue('ARK_DURATION_INVALID', 'durationSec', '此适配器要求 2–30 秒的明确整数时长，并须在连接能力清单中；不使用自动时长。');
     // Ark also parses --parameters inside text. They must not override the reviewed plan.
@@ -53,11 +59,14 @@ export function validateGeneration(profile: ProviderProfile, plan: GenerationPla
   for (const id of requested.referenceArtifactIds) {
     const artifact = byId.get(id);
     if (!artifact) { issue('REFERENCE_METADATA_MISSING', '参考素材不存在或尚未登记。'); continue; }
-    if (profile.kind !== 'ark-video') continue;
+    if (profile.kind !== 'ark-video' && profile.kind !== 'openai-image-edits') continue;
     if (artifact.kind !== 'image' || artifact.media.kind !== 'image') { issue('ARK_IMAGE_REFERENCE_REQUIRED', '当前 Ark 适配器只发送图片参考；不把视频或音频自动转换为图片。'); continue; }
     const { width, height } = artifact.media;
     if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width! < 300 || width! > 6000 || height! < 300 || height! > 6000 || width! / height! < 0.4 || width! / height! > 2.5) issue('ARK_REFERENCE_DIMENSIONS', '参考图片宽高必须为 300–6000 像素，宽高比介于 0.4 和 2.5。');
-    if (!imageFormat(artifact)) issue('ARK_REFERENCE_FORMAT', '参考图片格式须为 JPEG、PNG、WebP、BMP、TIFF 或 GIF。');
+    const format = imageFormat(artifact);
+    if (profile.kind === 'openai-image-edits' && !['jpeg','png','webp'].includes(format ?? ''))
+      issue('EDIT_REFERENCE_FORMAT', '图片编辑只支持 JPEG、PNG 或 WebP 格式的参考图。');
+    else if (!format) issue('ARK_REFERENCE_FORMAT', '参考图片格式须为 JPEG、PNG、WebP、BMP、TIFF 或 GIF。');
     if (!Number.isSafeInteger(artifact.sizeBytes) || artifact.sizeBytes <= 0 || artifact.sizeBytes > MAX_REFERENCE_IMAGE_BYTES) issue('ARK_REFERENCE_TOO_LARGE', 'OwnTake 的单张参考图片上限为 16 MiB。');
     else estimatedRequestBytes += Math.ceil(artifact.sizeBytes / 3) * 4 + 256;
   }

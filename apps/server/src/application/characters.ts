@@ -1,7 +1,9 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { AppError, invariant } from '../../../../packages/contracts/src/errors.ts';
+import { resolveAsset } from '../assets.ts';
+import { createHash } from 'node:crypto';
 import { probe } from '../../../../packages/media/src/index.ts';
 import type { CharacterVisual } from '../../../../packages/contracts/src/character.ts';
 import type { ApplicationContext } from './context.ts';
@@ -37,4 +39,18 @@ export async function registerCharacterVisual(context:Pick<ApplicationContext,'s
     signal?.throwIfAborted();
     return context.characters.addVisual(characterId,bytes,{mime:kind.mime,width:media.width,height:media.height});
   }finally{await rm(work,{recursive:true,force:true});}
+}
+
+/** Promote an existing immutable project image into the global actor library without reuploading. */
+export async function importCharacterVisualFromArtifact(
+  context:Pick<ApplicationContext,'store'|'characters'>,characterId:string,artifactId:string
+):Promise<CharacterVisual> {
+  const { artifact,path }=await resolveAsset(context.store,artifactId);
+  invariant(artifact.kind==='image'&&artifact.sizeBytes>0&&artifact.sizeBytes<=CHARACTER_POLICY.maxReferenceBytes,
+    'INVALID_REFERENCE','只能从项目中已登记的静态图片建立人物形象',422);
+  const bytes=await readFile(path);
+  invariant(bytes.length===artifact.sizeBytes&&
+    createHash('sha256').update(bytes).digest('hex')===artifact.sha256,
+    'REFERENCE_CHANGED','项目素材已改变，不能用作人物形象',409);
+  return registerCharacterVisual(context,characterId,Readable.from([bytes]));
 }

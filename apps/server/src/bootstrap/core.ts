@@ -1,3 +1,4 @@
+import { ShotCastRepository } from '../../../../packages/storage/src/shot-cast-repository.ts';
 import { CharacterRepository } from '../../../../packages/storage/src/character-repository.ts';
 import { StoryDiscovery } from '../../../../packages/providers/src/discovery.ts';
 import { StoryRepository } from '../../../../packages/storage/src/story-repository.ts';
@@ -34,10 +35,12 @@ export async function createCore(config: ServerConfig): Promise<CoreRuntime> {
     const generations = new GenerationRepository(store, board, providers);
     const runtimes = new RuntimeRepository(store);
     const studio = new StudioRepository(store, board, providers, runtimes);
+    const characters = new CharacterRepository(store);
     const context: ApplicationContext = {
       store,
       stories: new StoryRepository(store),
-      characters: new CharacterRepository(store),
+      characters,
+      shotCast: new ShotCastRepository(store,board,characters),
       discovery: new StoryDiscovery(),
       board,
       providers,

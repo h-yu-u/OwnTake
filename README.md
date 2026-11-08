@@ -71,7 +71,17 @@ OWNTAKE_DATA_DIR=/absolute/path/to/new-data npm run backup -- restore /absolute/
 
 [文档入口](docs/README.md) · [架构](docs/architecture.md) · [实施计划](docs/implementation-plan.md) · [原始交互原型](docs/prototype/README.md)
 
-开发按 P1–P5 分阶段交付；每阶段的实际验证和限制记录在 `docs/validation/`。原型与正式程序分开，原型中的模拟状态不用于证明正式功能已经实现。
+原有创作底座按 P1–P5 交付；故事与人物资产扩展按 P6–P9 分阶段实现，详见 `docs/phases/`。每阶段的实际验证和限制记录在文档与 CI 中。原型与正式程序分开，原型中的模拟状态不用于证明正式功能已经实现。
+
+## 故事库、人物库与创作闭环（P6–P9）
+
+- **故事库：** 保存原创故事、剧情节点和不可变剧本版本。可把确定版本创建成作品，并按场景生成**待人工审核**的分镜草稿。故事版本与作品关联可追溯。
+- **发现故事：** 支持知乎官方授权搜索、经授权的全网索引限定小红书域名、手动粘贴来源链接。需要在启动服务前设置 `OWNTAKE_ZHIHU_ACCESS_SECRET` 才能发起官方检索；无凭据仍能手动收藏。外部内容默认只用于灵感参考，**不自动取得全文或改编授权**。
+- **人物库：** 创建虚拟演员、锁定不可变参考图片版本、设置造型与声音预设。可上传 PNG/JPEG/WebP，或将当前项目已有 AI 图片直接保存为角色形象；每张 16 MiB 内，随 SQLite 备份恢复。
+- **镜头绑定：** 将演员绑定到具体作品和镜头后自动引用对应项目的锁定图片。生成时可选择新 `openai-image-edits` 连接，通过 `/images/edits` 的 JSON `images[]` 传入参考图，或使用已有 Ark 视频参考模式。生成记录冻结角色和视觉版本，用户必须审阅计划、预算与结果。
+- **限制：** 模型输出的人物一致性并不保证，尤其是多人镜头；候选仍需人工复核。当前未调用真实收费模型，也未开展跨账号或第三方作品授权测试。
+
+阶段记录：[P6 故事资产](docs/phases/06-story-library.md) · [P7 合规发现](docs/phases/07-story-discovery.md) · [P8 人物库](docs/phases/08-character-library.md) · [P9 人物驱动生成](docs/phases/09-cast-driven-filmmaking.md)。
 
 ## 分镜与可选推理
 
