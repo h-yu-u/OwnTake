@@ -2,14 +2,19 @@ import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApplicationContext } from '../../application/context.ts';
 import { requestReasoning } from '../../application/providers.ts';
+import { discoverProviderModels } from '../../application/provider-models.ts';
 import { IdParams, Settlement } from '../schemas/common.ts';
-import { ProviderInput, ReasoningInput } from '../schemas/providers.ts';
+import { ProviderInput, ProviderModelDiscoveryInput, ReasoningInput } from '../schemas/providers.ts';
 
 const profileValidation = { bodyCode: 'INVALID_PROVIDER', fields: { '/key': 'INVALID_KEY' } };
 
 export function registerProviderRoutes(fastify: FastifyInstance, context: Pick<ApplicationContext, 'providers' | 'models'>): void {
   const app = fastify.withTypeProvider<TypeBoxTypeProvider>();
   app.get('/providers', async () => context.providers.listProfiles());
+  app.post('/providers/models', {
+    schema: { body: ProviderModelDiscoveryInput },
+    config: { validation: { bodyCode: 'INVALID_PROVIDER_MODEL_REQUEST', fields: { '/key': 'INVALID_KEY', '/providerId': 'INVALID_ID' } } },
+  }, async request => discoverProviderModels(context, request.body));
   app.post('/providers', {
     schema: { body: ProviderInput }, config: { validation: profileValidation },
   }, async (request, reply) => reply.code(201).send(context.providers.saveProfile(request.body)));

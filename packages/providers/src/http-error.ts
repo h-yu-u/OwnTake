@@ -15,6 +15,17 @@ const explanations: Record<string, string> = {
   unsupported_value: '接口不支持请求中的某个参数值，需要调整接口适配',
   invalid_json_schema: '结构化输出的 JSON Schema 不被接口接受，需要调整接口适配',
   context_length_exceeded: '输入与输出上限超过模型上下文限制，请减少镜头或描述',
+  'InvalidEndpointOrModel.NotFound': '模型或推理接入点不存在，或当前 Key 无权访问；请检查模型开通状态、项目权限及模型 / 接入点 ID',
+  ModelNotOpen: '当前账号尚未开通该模型，请到火山方舟控制台的开通管理页开通对应模型服务',
+  'InvalidEndpointOrModel.ModelIDAccessDisabled': '当前账号不允许通过模型 ID 调用，请在连接设置中改用有权限的推理接入点 ID（ep-…）',
+  PathNotFound: '供应商未识别 API 路径，请检查服务地址及接口路由配置',
+  InvalidAction: '供应商不支持该请求方法或 API 路径，请检查接口适配与服务地址',
+  AuthenticationError: 'API Key 鉴权失败，请检查密钥及所属服务',
+  'OperationDenied.ServiceNotOpen': '模型服务尚未开通或不可用，请到火山方舟控制台检查开通状态',
+  'OperationDenied.ServiceOverdue': '账号账单已逾期，请在火山费用中心核对余额',
+  AccountOverdueError: '账号欠费，请在火山费用中心核对余额',
+  AccessDenied: '当前 Key 无权访问该资源，请检查项目权限与访问限制',
+  SetLimitExceeded: '模型或接入点已达到设置的用量上限，请到火山方舟控制台检查限额与安心体验模式',
 };
 const parameters = new Set(['model', 'messages', 'tools', 'tool_choice', 'response_format', 'response_format.json_schema',
   'response_format.json_schema.schema', 'max_completion_tokens', 'reasoning_effort', 'temperature', 'n', 'stream', 'store']);
@@ -46,7 +57,7 @@ export function describeHttpRejection(status: number, body: unknown): string {
   const parameter = typeof error.param === 'string' && parameters.has(error.param) ? error.param : undefined;
   const fallback = status === 401 ? '身份认证失败，请检查连接中的 API Key'
     : status === 403 ? '访问被拒绝，请检查账号、Key 权限与访问地区'
-    : status === 404 ? '模型或接口不存在，请核对模型 ID 与服务地址'
+    : status === 404 ? '模型未开通、无访问权限或模型 / 接口不存在，请核对供应商开通管理、Key 权限、模型 ID 与服务地址'
     : status === 429 ? '供应商返回限流或额度限制，未取得具体原因，请核对账号控制台'
     : status === 400 || status === 422 ? '请求参数被拒绝，请检查模型与接口的兼容性'
     : '接口拒绝请求，请检查连接与账号权限';

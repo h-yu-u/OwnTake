@@ -4,6 +4,7 @@ import { NAlert, NButton, NCollapse, NCollapseItem, NForm, NFormItem, NInput, NI
 import type { Artifact, BoardSnapshot, LocalRuntimeProfile, Project, ProviderSummary, SpeechInput, StudioCreateRequest, StudioKind, StudioOperation } from '../types.ts';
 import { activeShots } from '../lib/storyboard.ts';
 import { speechProblems, studioKindLabels, studioStatusLabels } from '../lib/studio.ts';
+import { speechVoiceOptions } from '../lib/speech-voices.ts';
 import { reasoningEffortLabels } from '../lib/runtime.ts';
 import { artifactUrl } from '../lib/api.ts';
 import { useSpeechPreview } from '../composables/useSpeechPreview.ts';
@@ -45,7 +46,7 @@ const target = computed(() => props.kind === 'runtime_draft' ? runtime.value : p
 const targetOptions = computed(() => props.kind === 'runtime_draft'
   ? props.runtimes.filter(item => item.enabled).map(item => ({ label: `${item.label} · ${item.model}`, value: item.id }))
   : props.providers.filter(item => props.kind === 'tts' ? item.kind === 'openai-speech' && item.capabilities.speech : item.kind === 'chat-completions' && item.capabilities.frameReview).map(item => ({ label: `${item.label} · ${item.model}`, value: item.id })));
-const voiceOptions = computed(() => provider.value?.capabilities.speech?.voices.map(voice => ({ label: voice, value: voice })) || []);
+const voiceOptions = computed(() => speechVoiceOptions(provider.value?.capabilities.speech?.voices || []));
 const candidate = computed(() => props.board?.candidates.find(item => item.id === candidateId.value));
 const artifact = computed(() => props.artifacts.find(item => item.id === candidate.value?.artifactId));
 const candidateOptions = computed(() => (props.board?.candidates || []).filter(item => props.artifacts.some(asset => asset.id === item.artifactId && ['image', 'video'].includes(asset.kind))).map(item => ({ value: item.id, label: `${props.board?.shots.find(shot => shot.id === item.shotId)?.title || '历史镜头'} · v${item.visualRevision} · ${props.artifacts.find(asset => asset.id === item.artifactId)?.name || item.artifactId}` })));
@@ -95,7 +96,8 @@ function submit() {
       <template v-if="kind === 'tts'">
         <NFormItem label="配音文字"><NInput :input-props="{ 'aria-label': '配音文字' }" v-model:value="speech.text" type="textarea" :autosize="{ minRows: 5, maxRows: 12 }" :disabled="locked" placeholder="写下希望朗读的内容，也可以先试听声音。" /></NFormItem>
         <p class="form-note">{{ speech.text.length }} 字符<span v-if="provider?.capabilities.speech"> / 声明上限 {{ provider.capabilities.speech.maxInputChars }}</span>。文本不会被静默截断。</p>
-        <div class="shot-form-row"><NFormItem label="声音 ID"><NSelect aria-label="声音 ID" :input-props="{ 'aria-label': '声音 ID' }" v-model:value="speech.voice" :options="voiceOptions" :disabled="locked" placeholder="选择声明支持的声音" /></NFormItem><NFormItem label="语速（倍）"><NInputNumber :input-props="{ 'aria-label': '语速（倍）' }" v-model:value="speech.speed" :min="provider?.capabilities.speech?.minSpeed || 0.25" :max="provider?.capabilities.speech?.maxSpeed || 4" :step="0.05" :precision="2" :disabled="locked" /></NFormItem></div>
+        <div class="shot-form-row"><NFormItem label="声音音色"><NSelect aria-label="声音音色" :input-props="{ 'aria-label': '声音音色' }" v-model:value="speech.voice" :options="voiceOptions" filterable :disabled="locked" placeholder="搜索音色、用途或声音 ID" /></NFormItem><NFormItem label="语速（倍）"><NInputNumber :input-props="{ 'aria-label': '语速（倍）' }" v-model:value="speech.speed" :min="provider?.capabilities.speech?.minSpeed || 0.25" :max="provider?.capabilities.speech?.maxSpeed || 4" :step="0.05" :precision="2" :disabled="locked" /></NFormItem></div>
+        <p class="form-note">中文标签供选音参考，实际效果以试听为准；播报语气可在下方风格指令中调整。</p>
         <NFormItem label="语气与风格指令（可选）"><NInput :input-props="{ 'aria-label': '语气与风格指令（可选）' }" :value="speech.instructions || ''" type="textarea" :rows="2" :disabled="locked" placeholder="例如语气与节奏；仅支持此能力的模型可接收" @update:value="speech.instructions = $event || null" /></NFormItem>
         <div class="speech-audition">
           <div class="heading-line"><strong>声音试听</strong><NButton size="small" :loading="speechBusy" :disabled="locked || speechBusy || auditionIssues.length > 0 || Boolean(auditionOperation && !speechReady)" @click="previewSpeech">{{ speechReady ? '播放试听' : audition.registrationUnknown.value ? '查询试听结果' : '生成试听' }}</NButton><NTag v-if="auditionOperation" size="small" :bordered="false">{{ studioStatusLabels[auditionOperation.status] }}</NTag></div>

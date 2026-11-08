@@ -39,7 +39,7 @@ async function harness(t: TestContext) {
   let supplierOrigin = '';
   let png = Buffer.alloc(0), video = Buffer.alloc(0);
   const state = {
-    imagePosts: 0, videoPosts: 0, reasoningPosts: 0, dropNextVideo: false, nextImageError: 0,
+    imagePosts: 0, videoPosts: 0, reasoningPosts: 0, dropNextVideo: false, nextImageError: 0, nextVideoError: '',
     imageQualities: [] as unknown[],
     nextVideoDownloadFailures: 0,
     nextVideoHtmlFailures: 0,
@@ -65,6 +65,10 @@ async function harness(t: TestContext) {
       }
       if (request.method === 'POST' && path === '/v1/contents/generations/tasks') {
         await bodyOf(request); state.videoPosts += 1;
+        if (state.nextVideoError) {
+          const code = state.nextVideoError; state.nextVideoError = '';
+          reply(response, { error: { code, message: `${key} and private prompt` } }, 404); return;
+        }
         const id = `cgt-fixture-${state.videoPosts}`;
         state.tasks.set(id, { status: 'running', failDownloads: state.nextVideoDownloadFailures, htmlDownloads: state.nextVideoHtmlFailures, downloads: 0, polls: 0 });
         state.nextVideoDownloadFailures = 0; state.nextVideoHtmlFailures = 0;
@@ -215,6 +219,22 @@ test('generation diagnostics persist HTTP failures without leaking provider text
     const same = await h.api<GenerationRecord>(`/api/shots/${shot.id}/generations`, 'POST', request, 202);
     assert.equal(same.id, failed.id); assert.deepEqual(same.error, failed.error); assert.equal(h.state.imagePosts, count);
   }
+});
+
+test('unbudgeted video keeps Ark rejection guidance across restart and never resubmits the same operation', async t => {
+  const h = await harness(t), project = await h.createProject(), shot = await h.createShot(project.id, 'generate_video'), connection = await h.provider('ark-video');
+  h.state.nextVideoError = 'ModelNotOpen';
+  const { reservation: ignored, ...request } = h.intent(shot, connection, videoPlan, 'video-model-not-open');
+  const accepted = await h.api<GenerationRecord>(`/api/shots/${shot.id}/generations`, 'POST', request, 202);
+  const failed = await h.until(project.id, accepted.id, record => record.status === 'failed');
+  assert.equal(failed.error?.code, 'GENERATION_REJECTED'); assert.match(failed.error!.message, /HTTP 404 · ModelNotOpen/);
+  assert.match(failed.error!.message, /火山方舟控制台的开通管理/);
+  assert.equal(failed.budgetMode, 'none'); assert.equal(failed.reservedAmount, 0); assert.equal(failed.actualAmount, null);
+  assert.equal(failed.remoteTaskId, null); assert.equal(h.app.generations.get(failed.id).reservation, null);
+  assert.doesNotMatch(JSON.stringify(failed), /private-generation-fixture-key|private prompt/);
+  await h.restart();
+  const same = await h.api<GenerationRecord>(`/api/shots/${shot.id}/generations`, 'POST', request, 202);
+  assert.equal(same.id, failed.id); assert.deepEqual(same.error, failed.error); assert.equal(h.state.videoPosts, 1);
 });
 
 test('generation API publishes an image candidate and preserves a pending video across restart and visual revision changes', { timeout: 60000 }, async t => {

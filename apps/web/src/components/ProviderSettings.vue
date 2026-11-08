@@ -5,6 +5,9 @@ import type { ProviderCapabilities, ProviderInputMode, ProviderKind, ProviderSum
 import type { ProviderInput } from '../lib/providerApi.ts';
 import { inputModeOptions, parseDurationChoices, ratioOptions } from '../lib/generation.ts';
 import { parseVoiceChoices } from '../lib/studio.ts';
+import { useProviderModelCatalog } from '../composables/useProviderModelCatalog.ts';
+import { providerModelsForKind } from '../lib/provider-models.ts';
+import { automaticModelCapabilities } from '../../../../packages/providers/src/ark-model-capabilities.ts';
 import AppIcon from './AppIcon.vue';
 
 const props = defineProps<{ providers: ProviderSummary[]; savedRevision: number; disabled: boolean }>();
@@ -18,6 +21,37 @@ const connectionForm = ref({ label: '', kind: 'chat-completions' as ProviderKind
 const kinds = [{ label: '分镜推理 / 抽帧审核 · Chat Completions', value: 'chat-completions' }, { label: '图片生成 · OpenAI Images', value: 'openai-images' }, { label: '视频生成 · Ark', value: 'ark-video' }, { label: '配音 · OpenAI Speech 兼容协议', value: 'openai-speech' }];
 const kindLabel = (kind: ProviderKind) => ({ 'chat-completions': '分镜推理 / 审核', 'openai-images': '图片生成', 'ark-video': '视频生成', 'openai-speech': '配音' })[kind];
 const requiresNewKey = computed(() => { try { return Boolean(editing.value?.hasKey && new URL(editing.value.baseUrl).origin !== new URL(connectionForm.value.baseUrl).origin); } catch { return false; } });
+function origin(value: string): string { try { return new URL(value).origin; } catch { return ''; } }
+watch(() => origin(connectionForm.value.baseUrl), (next, previous) => {
+  if (show.value && previous && next !== previous) connectionForm.value.key = '';
+}, { flush: 'sync' });
+const discoveryInput = computed(() => {
+  const { kind, baseUrl, key } = connectionForm.value;
+  try {
+    const url = new URL(baseUrl.trim());
+    if (!['https:', 'http:'].includes(url.protocol) || url.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(url.hostname) || url.username || url.password || url.search || url.hash) return null;
+    if (!key.trim() && requiresNewKey.value) return null;
+    if (!key.trim() && !editing.value?.hasKey && !['localhost', '127.0.0.1'].includes(url.hostname)) return null;
+    return { kind, baseUrl: baseUrl.trim(), ...(key.trim() ? { key: key.trim() } : {}), ...(editing.value ? { providerId: editing.value.id } : {}) };
+  } catch { return null; }
+});
+const modelCatalog = useProviderModelCatalog(() => discoveryInput.value, () => show.value);
+const modelOptions = computed(() => providerModelsForKind(modelCatalog.catalog.value?.models || [], connectionForm.value.kind).map(model => ({ value: model.id, label: model.name && model.name !== model.id ? `${model.name} · ${model.id}` : model.id })));
+const automaticCapabilities = computed(() => automaticModelCapabilities(connectionForm.value.kind, connectionForm.value.model));
+const manualCapabilities = ref(false);
+let opening = false;
+function applyAutomaticCapabilities() {
+  manualCapabilities.value = false;
+  const capabilities = automaticCapabilities.value?.capabilities;
+  if (capabilities) {
+    connectionForm.value.inputModes = [...capabilities.inputModes]; connectionForm.value.ratios = [...capabilities.ratios];
+    connectionForm.value.durationChoices = capabilities.durationsSec.join(', '); connectionForm.value.maxReferences = capabilities.maxReferences;
+  } else if (connectionForm.value.kind === 'ark-video' && connectionForm.value.model !== editing.value?.model) {
+    connectionForm.value.inputModes = ['text']; connectionForm.value.ratios = ['16:9'];
+    connectionForm.value.durationChoices = '5'; connectionForm.value.maxReferences = 0;
+  }
+}
+watch([() => connectionForm.value.kind, () => connectionForm.value.model], () => { if (!opening) applyAutomaticCapabilities(); }, { flush: 'sync' });
 const durations = computed(() => parseDurationChoices(connectionForm.value.durationChoices));
 const voices = computed(() => parseVoiceChoices(connectionForm.value.voiceChoices));
 const valid = computed(() => {
@@ -33,12 +67,18 @@ const valid = computed(() => {
   } catch { return false; }
 });
 function open(provider: ProviderSummary | null) {
+  opening = true;
   editing.value = provider;
   connectionForm.value = { label: provider?.label || '', kind: provider?.kind || 'chat-completions', baseUrl: provider?.baseUrl || 'https://api.openai.com/v1', model: provider?.model || '', key: '', maxOutputTokens: provider?.maxOutputTokens || 4096, timeoutMs: provider?.timeoutMs || 60000,
     inputModes: [...provider?.capabilities.inputModes || ['text']], ratios: [...provider?.capabilities.ratios || []], durationChoices: provider?.capabilities.durationsSec.join(', ') || '', maxReferences: provider?.capabilities.maxReferences || 0,
     frameReviewEnabled: Boolean(provider?.capabilities.frameReview), frameReviewMaxImages: provider?.capabilities.frameReview?.maxImages ?? 3,
     voiceChoices: provider?.capabilities.speech?.voices.join(', ') || '', supportsInstructions: provider?.capabilities.speech?.supportsInstructions ?? false,
     minSpeed: provider?.capabilities.speech?.minSpeed ?? 0.25, maxSpeed: provider?.capabilities.speech?.maxSpeed ?? 4, maxInputChars: provider?.capabilities.speech?.maxInputChars ?? 4096 };
+  opening = false;
+  const expected = automaticCapabilities.value?.capabilities;
+  const sameList = (a: Array<string | number>, b: Array<string | number>) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  if (provider && expected && (!sameList(provider.capabilities.inputModes, expected.inputModes) || !sameList(provider.capabilities.ratios, expected.ratios) || !sameList(provider.capabilities.durationsSec, expected.durationsSec) || provider.capabilities.maxReferences !== expected.maxReferences)) manualCapabilities.value = true;
+  else applyAutomaticCapabilities();
   show.value = true;
 }
 function changeKind(kind: ProviderKind) {
@@ -67,15 +107,25 @@ function save() {
     <div class="panel-heading"><div><h2>协议兼容连接</h2><p class="subheading">按协议配置第三方或本地服务，分别指定模型与能力。</p></div><div class="heading-line"><NButton text size="small" :disabled="disabled" @click="emit('refresh')">刷新</NButton><NButton :disabled="disabled" @click="open(null)"><template #icon><AppIcon name="plus" :size="16" /></template>添加兼容连接</NButton></div></div>
     <p v-if="!compatibleProviders.length" class="draft-empty">需要接入第三方或本地模型时，在这里添加兼容连接。</p>
     <div v-else class="provider-list"><article v-for="provider in compatibleProviders" :key="provider.id" class="provider-row"><div class="provider-symbol"><AppIcon :name="provider.kind === 'chat-completions' ? 'storyboard' : provider.kind === 'openai-images' ? 'image' : provider.kind === 'openai-speech' ? 'audio' : 'film'" :size="22" /></div><div class="provider-copy"><div class="heading-line"><strong>{{ provider.label }}</strong><NTag size="small" :bordered="false">{{ kindLabel(provider.kind) }}</NTag><NTag size="small" :bordered="false" type="warning">尚未实接验证</NTag><NTag size="small" :bordered="false" :type="provider.hasKey ? 'success' : 'default'">{{ provider.hasKey ? '已保存密钥' : '未配置密钥' }}</NTag></div><p>{{ provider.model }} · {{ provider.timeoutMs / 1000 }} 秒请求超时<span v-if="provider.kind === 'chat-completions'"> · 最多 {{ provider.maxOutputTokens }} 输出 tokens</span></p><p v-if="provider.capabilities.speech">声明：{{ provider.capabilities.speech.voices.join(' / ') }} · {{ provider.capabilities.speech.minSpeed }}–{{ provider.capabilities.speech.maxSpeed }} 倍速 · 最多 {{ provider.capabilities.speech.maxInputChars }} 字符 · WAV</p><p v-if="provider.capabilities.frameReview">声明：可读图片并返回严格 JSON 结构，最多 {{ provider.capabilities.frameReview.maxImages }} 帧</p><p v-if="provider.kind === 'openai-images' || provider.kind === 'ark-video'">声明：{{ provider.capabilities.inputModes.map(mode => inputModeOptions.find(option => option.value === mode)?.label).join(' / ') }} · {{ provider.capabilities.ratios.join(' / ') }}<span v-if="provider.capabilities.durationsSec.length"> · {{ provider.capabilities.durationsSec.join(' / ') }} 秒</span></p><code>{{ provider.baseUrl }}</code></div><NButton size="small" :disabled="disabled" @click="open(provider)">编辑</NButton></article></div>
-    <p class="panel-footnote">保存连接不会发起付费请求。能力由你声明，实际端点、模型权限、模型有效期与结果需通过真实使用核验。</p>
-    <NModal v-model:show="show" preset="card" :title="editing ? '编辑兼容连接' : '添加兼容连接'" class="provider-modal" :mask-closable="!disabled" :closable="!disabled">
+    <p class="panel-footnote">保存连接不会发起付费请求。能力使用自动配置或手动设置，实际端点、模型权限、模型有效期与结果需通过真实使用核验。</p>
+    <NModal v-model:show="show" preset="card" :title="editing ? '编辑兼容连接' : '添加兼容连接'" class="provider-modal compatible-provider-modal" :mask-closable="!disabled" :closable="!disabled">
       <NForm @submit.prevent="save">
         <NFormItem label="连接类型"><NSelect aria-label="连接类型" :input-props="{ 'aria-label': '连接类型' }" :value="connectionForm.kind" :options="kinds" :disabled="disabled" @update:value="changeKind" /></NFormItem>
         <NFormItem label="连接名称"><NInput :input-props="{ 'aria-label': '连接名称' }" v-model:value="connectionForm.label" :maxlength="100" :disabled="disabled" placeholder="给这个模型连接起一个便于辨认的名字" /></NFormItem>
         <NFormItem label="服务地址（Base URL）"><NInput :input-props="{ 'aria-label': '服务地址（Base URL）' }" v-model:value="connectionForm.baseUrl" :disabled="disabled" /></NFormItem>
-        <NFormItem label="模型名称"><NInput :input-props="{ 'aria-label': '模型名称' }" v-model:value="connectionForm.model" :maxlength="200" :disabled="disabled" placeholder="填写服务实际提供的模型 ID" /></NFormItem>
         <NFormItem :label="editing?.hasKey ? 'API Key（留空保留已保存值）' : 'API Key（本地兼容服务可留空）'"><NInput v-model:value="connectionForm.key" type="password" show-password-on="click" :disabled="disabled" :input-props="{ autocomplete: 'new-password', 'aria-label': 'API Key' }" placeholder="密钥保存在本地服务，不会回显" /></NFormItem>
+        <NFormItem label="选择模型"><NSelect :input-props="{ 'aria-label': '选择模型', maxlength: 200 }" v-model:value="connectionForm.model" :options="modelOptions" filterable tag :loading="modelCatalog.loading.value" :disabled="disabled" placeholder="搜索选择，或输入模型 ID 后按回车" /></NFormItem>
+        <div class="heading-line"><span class="form-note" role="status">{{ modelCatalog.loading.value ? '正在读取模型列表…' : modelCatalog.catalog.value ? modelOptions.length ? `已读取 ${modelOptions.length} 个当前用途的候选模型` : '列表中没有当前用途的模型，可手动填写模型 ID。' : '输入 Key 后自动读取模型，也可直接填写模型 ID。' }}</span><NButton text size="small" :loading="modelCatalog.loading.value" :disabled="disabled || !discoveryInput || modelCatalog.loading.value" @click="modelCatalog.refresh">刷新模型</NButton></div>
+        <NAlert v-if="modelCatalog.error.value" type="warning" :show-icon="false" class="draft-alert">{{ modelCatalog.error.value }}</NAlert>
+        <p class="form-note">查询只读取模型目录，不生成内容。已识别的模型自动配置能力，列表不代表已验证生成权限。</p>
         <div class="shot-form-row"><NFormItem v-if="connectionForm.kind === 'chat-completions'" label="最大输出 tokens"><NInputNumber :input-props="{ 'aria-label': '最大输出 tokens' }" v-model:value="connectionForm.maxOutputTokens" :min="1" :max="8192" :precision="0" :disabled="disabled" /></NFormItem><NFormItem label="单次 HTTP 超时（秒）"><NInputNumber :input-props="{ 'aria-label': '单次 HTTP 超时（秒）' }" :value="connectionForm.timeoutMs / 1000" :min="1" :max="120" :precision="0" :disabled="disabled" @update:value="value => { if (value !== null) connectionForm.timeoutMs = value * 1000; }" /></NFormItem></div>
+        <section v-if="automaticCapabilities" class="automatic-capabilities" aria-label="自动模型能力">
+          <div class="heading-line"><h3>模型能力</h3><NTag size="small" :bordered="false">{{ manualCapabilities ? '手动调整' : '已自动配置' }}</NTag><NButton v-if="!manualCapabilities" text size="small" :disabled="disabled" @click="manualCapabilities = true">高级设置</NButton><NButton v-else text size="small" :disabled="disabled" @click="applyAutomaticCapabilities">恢复自动配置</NButton></div>
+          <template v-if="!manualCapabilities"><p>{{ connectionForm.inputModes.map(mode => inputModeOptions.find(option => option.value === mode)?.label).join(' / ') }}</p><p>{{ connectionForm.ratios.join(' / ') }} · {{ durations?.[0] }}–{{ durations?.[durations.length - 1] }} 秒（整数） · 最多 {{ connectionForm.maxReferences }} 张输入图片</p></template>
+          <p class="form-note">来源：<a :href="automaticCapabilities.sourceUrl" target="_blank" rel="noopener noreferrer">火山方舟官方能力配置</a></p><p v-for="note in automaticCapabilities.notes" :key="note" class="form-note">{{ note }}</p>
+        </section>
+        <p v-else-if="connectionForm.kind === 'ark-video' && connectionForm.model" class="form-note">尚无此模型的完整能力配置，请在下方设置；不会套用其他模型的能力。</p>
+        <template v-if="!automaticCapabilities || manualCapabilities">
         <template v-if="connectionForm.kind === 'chat-completions'">
           <h3 class="capability-heading">可选抽样帧审核</h3>
           <NCheckbox v-model:checked="connectionForm.frameReviewEnabled" :disabled="disabled">此模型支持图片输入与严格 JSON Schema 输出</NCheckbox>
@@ -98,9 +148,19 @@ function save() {
           <div v-if="connectionForm.kind === 'ark-video'" class="shot-form-row"><NFormItem label="支持时长（秒，逗号分隔）"><NInput :input-props="{ 'aria-label': '支持时长（秒，逗号分隔）' }" v-model:value="connectionForm.durationChoices" :disabled="disabled" placeholder="例如 5, 10" /></NFormItem><NFormItem label="最多参考图片数"><NInputNumber :input-props="{ 'aria-label': '最多参考图片数' }" v-model:value="connectionForm.maxReferences" :min="0" :max="20" :precision="0" :disabled="disabled" /></NFormItem></div>
           <p class="form-note">按这个模型的实际文档填写。声明会限制可提交计划，不会把未知能力自动标成可用。</p>
         </template>
+        </template>
         <NAlert v-if="requiresNewKey" type="warning" :show-icon="false" class="draft-alert">地址已改到另一个来源，请重新填写该服务的密钥。</NAlert>
         <div class="dialog-actions"><NButton :disabled="disabled" @click="show = false">取消</NButton><NButton type="primary" attr-type="submit" :loading="disabled" :disabled="disabled || !valid">保存连接</NButton></div>
       </NForm>
     </NModal>
   </section>
 </template>
+
+<style>
+.compatible-provider-modal .n-card-content { max-height: calc(100dvh - 140px); overflow-y: auto; overscroll-behavior: contain; }
+.compatible-provider-modal .dialog-actions { position: sticky; bottom: 0; z-index: 1; padding: 12px 0; background: var(--panel); }
+.automatic-capabilities { border: 1px solid var(--line-soft); border-radius: 12px; padding: 16px; margin: 12px 0 20px; }
+.automatic-capabilities .heading-line { flex-wrap: wrap; }
+.automatic-capabilities .heading-line h3 { margin-right: auto; }
+.automatic-capabilities > p { margin: 10px 0 0; }
+</style>

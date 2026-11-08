@@ -2,6 +2,12 @@ import { Type } from 'typebox';
 import { ExistingRevision, Ratio, Reservation, ResourceId, Revision } from './common.ts';
 
 export const ProviderInputMode = Type.Union([Type.Literal('text'), Type.Literal('first_frame'), Type.Literal('first_last_frame'), Type.Literal('references')]);
+export const ProviderModelDiscoveryInput = Type.Object({
+  providerId: Type.Optional(ResourceId),
+  kind: Type.Union([Type.Literal('chat-completions'), Type.Literal('openai-images'), Type.Literal('ark-video'), Type.Literal('openai-speech')]),
+  baseUrl: Type.String({ maxLength: 2048 }),
+  key: Type.Optional(Type.String({ maxLength: 8192 })),
+}, { additionalProperties: false });
 
 const SpeechCapabilities = Type.Object({
   voices: Type.Array(Type.String({ maxLength: 128 }), { minItems: 1, maxItems: 100 }),

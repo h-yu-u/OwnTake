@@ -3,6 +3,11 @@ import type { DraftOperation, Shot } from './storyboard.ts';
 
 export type ProviderKind = 'chat-completions' | 'openai-images' | 'ark-video' | 'openai-speech';
 export type ProviderInputMode = 'text' | 'first_frame' | 'first_last_frame' | 'references';
+export interface ProviderListedModel {
+  id: string; name: string | null; domain: string | null; outputModalities: string[];
+}
+export interface ProviderModelCatalog { models: ProviderListedModel[]; fetchedAt: string }
+export interface ProviderModelDiscoveryInput { kind: ProviderKind; baseUrl: string; key?: string; providerId?: string }
 export interface SpeechCapabilities {
   voices: string[];
   supportsInstructions: boolean;

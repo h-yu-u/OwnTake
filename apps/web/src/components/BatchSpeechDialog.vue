@@ -4,6 +4,7 @@ import { NAlert, NButton, NCheckbox, NFormItem, NInput, NInputNumber, NModal, NS
 import type { BatchSpeechRequest, ProviderSummary, Shot, StudioOperation } from '../types.ts';
 import { errorMessage } from '../lib/api.ts';
 import { speechProblems } from '../lib/studio.ts';
+import { speechVoiceOptions } from '../lib/speech-voices.ts';
 import { studioApi } from '../lib/studioApi.ts';
 
 const props = defineProps<{ show: boolean; projectId: string; boardRevision: number; shots: Shot[]; providers: ProviderSummary[]; records: StudioOperation[]; disabled: boolean }>();
@@ -14,7 +15,7 @@ const submitting = ref(false), attempted = ref(false), formError = ref('');
 const frozen = ref<BatchSpeechRequest | null>(null);
 const providers = computed(() => props.providers.filter(provider => provider.kind === 'openai-speech' && provider.capabilities.speech));
 const provider = computed(() => providers.value.find(provider => provider.id === targetId.value));
-const voices = computed(() => (provider.value?.capabilities.speech?.voices || []).map(value => ({ value, label: value })));
+const voices = computed(() => speechVoiceOptions(provider.value?.capabilities.speech?.voices || []));
 const selected = computed(() => entries.value.filter(entry => entry.selected));
 const locked = computed(() => props.disabled || submitting.value || attempted.value);
 function activeReason(shotId: string): string {
@@ -51,7 +52,8 @@ async function submit() {
     <p class="dialog-intro">已从每镜字幕填入台词，只朗读下方文字。统一选择声音后即可批量生成，也可以修改个别台词；不会改动原字幕。</p>
     <NFormItem label="配音模型"><NSelect v-model:value="targetId" :options="providers.map(provider => ({ value: provider.id, label: `${provider.label} · ${provider.model}` }))" aria-label="批量配音模型" :disabled="locked" placeholder="选择配音连接" /></NFormItem>
     <NAlert v-if="!providers.length" type="info" :show-icon="false">尚未配置配音连接。<NButton text type="primary" :disabled="locked" @click="emit('settings')">去设置</NButton></NAlert>
-    <div class="batch-speech-voice-fields"><NFormItem label="声音"><NSelect v-model:value="voice" :options="voices" aria-label="批量配音声音" :disabled="locked" /></NFormItem><NFormItem label="语速"><NInputNumber v-model:value="speed" :min="provider?.capabilities.speech?.minSpeed || 0.25" :max="provider?.capabilities.speech?.maxSpeed || 4" :step="0.1" :disabled="locked" :input-props="{ 'aria-label': '批量配音语速' }" /></NFormItem></div>
+    <div class="batch-speech-voice-fields"><NFormItem label="声音音色"><NSelect v-model:value="voice" :options="voices" filterable aria-label="批量配音声音" :disabled="locked" placeholder="搜索音色、用途或声音 ID" /></NFormItem><NFormItem label="语速"><NInputNumber v-model:value="speed" :min="provider?.capabilities.speech?.minSpeed || 0.25" :max="provider?.capabilities.speech?.maxSpeed || 4" :step="0.1" :disabled="locked" :input-props="{ 'aria-label': '批量配音语速' }" /></NFormItem></div>
+    <p class="form-note">中文标签供选音参考，实际效果以试听为准；播报语气可在下方风格指令中调整。</p>
     <NFormItem label="语气与风格（可选）"><NInput v-model:value="instructions" :disabled="locked" :placeholder="provider?.capabilities.speech?.supportsInstructions ? '例如：自然讲述，语气平静，停顿清晰' : '此模型不支持风格指令，请留空'" :maxlength="4096" /></NFormItem>
     <div class="heading-line"><strong>已选 {{ selected.length }} / {{ entries.length }} 镜</strong><NButton text :disabled="locked" @click="entries.forEach(entry => { entry.selected = Boolean(entry.text.trim()) && !activeReason(entry.shotId); })">全选可配音镜头</NButton><NButton text :disabled="locked" @click="entries.forEach(entry => { entry.selected = false; })">清空选择</NButton></div>
     <p class="form-note">默认跳过空台词、已有配音和待处理任务。需要重做已完成配音时，可主动勾选。</p>

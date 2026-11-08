@@ -388,8 +388,10 @@ main:focus { outline: none; }
 .provider-modal .n-card__content, .reasoning-modal .n-card__content, .generation-modal .n-card__content { max-height: 78vh; overflow-y: auto; }
 .capability-heading { font-size: 13px; margin: 5px 0 19px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
 .generation-modal { width: min(820px, calc(100vw - 32px)); }
-.batch-generation-modal.n-card { max-height: calc(100dvh - 48px); }
-.batch-generation-modal > .n-card-content { min-height: 0; overflow-y: auto; }
+.generation-modal.n-card { max-height: calc(100dvh - 48px); }
+.generation-modal > .n-card-content { min-height: 0; overflow-y: auto; }
+.single-generation-modal.n-card { height: min(820px, calc(100dvh - 48px)); }
+.single-generation-modal .dialog-actions { margin-top: 0; }
 .batch-selection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 12px 0; }
 .batch-shot-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: 18px; }
 .batch-shot-row { display: flex; flex-direction: column; gap: 5px; padding: 12px; border-bottom: 1px solid var(--line-soft); overflow-wrap: anywhere; }

@@ -1,0 +1,48 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { buildApp } from '../apps/server/src/app.ts';
+import type { ProviderSummary } from '../packages/contracts/src/providers.ts';
+
+const key = 'fixture-saved-directory-key';
+test('compatible model discovery protects sessions and saved origins without saving draft credentials or creating tasks', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'owntake-provider-models-'));
+  const requests: Array<{ url: string; method: string; auth?: string }> = [];
+  const supplier = createServer((request, response) => {
+    requests.push({ url: request.url!, method: request.method!, auth: request.headers.authorization });
+    response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ object: 'list', data: [{ id: 'seedance-fixture', domain: 'VideoGeneration', modalities: { output_modalities: ['video'] } }] }));
+  });
+  await new Promise<void>(resolve => supplier.listen(0, '127.0.0.1', resolve));
+  const app = await buildApp({ dataDir: join(root, 'data'), projectsDir: join(root, 'projects'), port: 4317, logLevel: 'silent' });
+  t.after(async () => { await app.close(); supplier.closeAllConnections(); await new Promise<void>(resolve => supplier.close(() => resolve())); await rm(root, { recursive: true, force: true }); });
+  const host = '127.0.0.1:4317';
+  const session = await app.inject({ url: '/api/session', headers: { host } });
+  const cookie = session.cookies.map(value => `${value.name}=${value.value}`).join('; '), csrf = session.json().csrfToken as string;
+  const headers = { host, cookie, 'x-csrf-token': csrf };
+  const baseUrl = `http://127.0.0.1:${(supplier.address() as AddressInfo).port}/api/v3`;
+  const draft = { kind: 'ark-video', baseUrl, key };
+  const post = (payload: unknown) => app.inject({ method: 'POST', url: '/api/providers/models', headers: { ...headers, 'content-type': 'application/json' }, payload: JSON.stringify(payload) });
+  assert.equal((await app.inject({ method: 'POST', url: '/api/providers/models', headers: { host }, payload: draft })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/providers/models', headers: { host, cookie }, payload: draft })).statusCode, 403);
+  assert.equal((await post({ ...draft, kind: 'invalid' })).statusCode, 400);
+  assert.equal((await post({ ...draft, unexpected: true })).statusCode, 400);
+  const result = await post(draft); assert.equal(result.statusCode, 200); assert.equal(result.json().models[0].id, 'seedance-fixture'); assert(!result.body.includes(key));
+  assert.equal(app.ownTake.providers.listProfiles().length, 0);
+  const savedResponse = await app.inject({ method: 'POST', url: '/api/providers', headers, payload: { ...draft, label: '本地目录夹具', model: 'unchanged-model', capabilities: { inputModes: ['text'], ratios: ['16:9'], durationsSec: [5], maxReferences: 0 } } });
+  assert.equal(savedResponse.statusCode, 201); const saved = savedResponse.json<ProviderSummary>();
+  const before = app.ownTake.providers.getProfile(saved.id);
+  const lookup = { providerId: saved.id, kind: 'ark-video', baseUrl };
+  assert.equal((await post(lookup)).statusCode, 200); assert.equal(requests.at(-1)?.auth, `Bearer ${key}`);
+  assert.equal((await post({ ...lookup, baseUrl: baseUrl.replace('127.0.0.1', 'localhost') })).statusCode, 409);
+  assert.equal(requests.length, 2, 'saved key must not travel to a changed origin');
+  assert.equal((await post({ ...lookup, key: 'fixture-replacement-key' })).statusCode, 200);
+  assert.equal(requests.at(-1)?.auth, 'Bearer fixture-replacement-key');
+  assert.deepEqual(app.ownTake.providers.getProfile(saved.id), before);
+  assert(requests.every(request => request.method === 'GET' && request.url === '/api/v3/models'));
+  assert.equal(Number(app.ownTake.store.db.prepare('SELECT count(*) AS n FROM jobs').get()!.n), 0);
+  assert.equal(Number(app.ownTake.store.db.prepare('SELECT count(*) AS n FROM provider_calls').get()!.n), 0);
+});

@@ -120,6 +120,9 @@ test('HTTP rejection diagnostics allow only known codes and parameters, never su
     [401, 'invalid_api_key', /API Key 无效/], [429, 'insufficient_quota', /余额或额度不足/],
     [429, 'rate_limit_exceeded', /限流/], [404, 'model_not_found', /模型不存在或当前账号无权/],
     [400, 'unsupported_parameter', /不支持请求中的某个参数/], [400, 'invalid_json_schema', /JSON Schema/],
+    [404, 'ModelNotOpen', /尚未开通/], [404, 'InvalidEndpointOrModel.NotFound', /无权访问/],
+    [404, 'InvalidEndpointOrModel.ModelIDAccessDisabled', /推理接入点 ID/],
+    [404, 'PathNotFound', /未识别 API 路径/], [404, 'InvalidAction', /请求方法或 API 路径/],
   ] as const) {
     const message = describeHttpRejection(status, { error: { code, param: 'response_format', message: 'secret-key and private brief', request: 'private brief' } });
     assert.match(message, new RegExp(`HTTP ${status}`)); assert(message.includes(code)); assert.match(message, explanation);
@@ -130,6 +133,7 @@ test('HTTP rejection diagnostics allow only known codes and parameters, never su
   }
   assert.match(describeHttpRejection(429, { error: { code: null, type: 'insufficient_quota' } }), /余额或额度不足/);
   assert.match(describeHttpRejection(429, {}), /未取得具体原因/);
+  assert.match(describeHttpRejection(404, {}), /未开通、无访问权限/);
 });
 
 test('a rejected POST retains bounded safe diagnostics and its HTTP classification even with broken or slow bodies', async () => {
