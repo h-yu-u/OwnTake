@@ -1,7 +1,7 @@
 node_modules/
 dist/
 apps/web/dist/
-release/
+/release/
 coverage/
 playwright-report/
 test-results/

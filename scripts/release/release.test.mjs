@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TARGETS, artifactNames, assertNative, assertReleaseTag, nativeTarget, targetById } from './targets.mjs';
-import { builderConfiguration, signingMode } from './config.mjs';
+import { builderConfiguration, signingEnvironment, signingMode } from './config.mjs';
 import { assertExecutableArchitecture, digestFile, verifyManifest, writeJson } from './integrity.mjs';
 import { assembleRelease } from './assemble.mjs';
 
@@ -55,6 +55,38 @@ test('builder keeps trusted signing explicit and never auto-publishes', () => {
   const signed = builderConfiguration(mac, { CSC_LINK: 'present', APPLE_ID: 'a', APPLE_APP_SPECIFIC_PASSWORD: 'b', APPLE_TEAM_ID: 'c' });
   assert.equal(signed.mac.notarize, true); assert.equal(signed.forceCodeSigning, true);
   assert.equal(builderConfiguration(targetById('windows-amd64')).nsis.deleteAppDataOnUninstall, false);
+});
+test('empty CI secrets are absent at the builder boundary without mutating the supplied environment', () => {
+  const original = {
+    CSC_LINK: '', CSC_KEY_PASSWORD: '', APPLE_ID: '', APPLE_APP_SPECIFIC_PASSWORD: '', APPLE_TEAM_ID: '',
+    CSC_IDENTITY_AUTO_DISCOVERY: 'false', PATH: '/toolchain/bin', UNRELATED_EMPTY_VALUE: '',
+  };
+  const env = signingEnvironment(original);
+  assert.deepEqual(env, { CSC_IDENTITY_AUTO_DISCOVERY: 'false', PATH: '/toolchain/bin', UNRELATED_EMPTY_VALUE: '' });
+  assert.equal(original.CSC_LINK, '');
+  // An empty but defined CSC_LINK makes electron-builder try to import the cwd
+  // as a certificate even when the macOS signing identity is explicitly '-'.
+  assert.equal(Object.hasOwn(env, 'CSC_LINK'), false);
+  for (const id of ['darwin-arm64', 'darwin-amd64']) {
+    const target = targetById(id), config = builderConfiguration(target, env);
+    assert.equal(signingMode(target, env), 'ad-hoc');
+    assert.equal(config.mac.identity, '-');
+    assert.equal(config.mac.notarize, false);
+    assert.equal(config.forceCodeSigning, false);
+  }
+  assert.equal(signingMode(targetById('windows-arm64'), env), 'unsigned');
+});
+test('blank credentials do not hide a partial signing setup and real values stay unchanged', () => {
+  const mac = targetById('darwin-arm64'), windows = targetById('windows-amd64');
+  const partial = { CSC_LINK: ' \n ', CSC_KEY_PASSWORD: 'password', APPLE_ID: '', APPLE_APP_SPECIFIC_PASSWORD: '', APPLE_TEAM_ID: '' };
+  assert.throws(() => signingMode(mac, partial), /partial configuration/);
+  assert.throws(() => signingMode(windows, partial), /password has no certificate/);
+  assert.throws(() => signingMode(mac, { CSC_LINK: '', APPLE_ID: 'account' }), /partial configuration/);
+  const complete = { CSC_LINK: '/certificate.p12', CSC_KEY_PASSWORD: ' password with spaces ', APPLE_ID: 'account', APPLE_APP_SPECIFIC_PASSWORD: 'app-password', APPLE_TEAM_ID: 'team' };
+  assert.deepEqual(signingEnvironment(complete), complete);
+  assert.equal(signingMode(mac, complete), 'developer-id-notarized');
+  assert.equal(signingMode(windows, complete), 'authenticode');
+  assert.equal(signingMode(mac, { ...complete, CSC_KEY_PASSWORD: '' }), 'developer-id-notarized');
 });
 test('tag validation rejects shell fragments, mismatched versions and newline injection', () => {
   assert.equal(assertReleaseTag('v0.1.0-rc.1','0.1.0-rc.1'), 'v0.1.0-rc.1');

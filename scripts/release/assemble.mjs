@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { TARGETS, assertReleaseTag } from './targets.mjs';
 import { digestFile, readManifest, verifyManifest, writeJson } from './integrity.mjs';
+import { formatReleaseNotes, readVersionChanges } from './notes.mjs';
 
 /** A complete release is all native targets from ONE exact source commit and version. */
 export async function assembleRelease(input, output, tag) {
@@ -25,6 +26,7 @@ export async function assembleRelease(input, output, tag) {
   const { commit, version } = manifests[0].manifest;
   assertReleaseTag(tag, version);
   if (!manifests.every(item => item.manifest.commit === commit && item.manifest.version === version)) throw new Error('Mixed commits or versions are not a release');
+  const changes = await readVersionChanges(tag, version);
   // Refuse stale output and never overwrite a previous release assembly.
   await mkdir(output, { recursive: false });
   try {
@@ -41,26 +43,7 @@ export async function assembleRelease(input, output, tag) {
     const release = { schema: 1, tag, version, commit, nativeSmokePassed: true, artifacts };
     await writeJson(join(output, 'release-manifest.json'), release);
     await writeFile(join(output, 'SHA256SUMS'), artifacts.map(file => `${file.sha256}  ${file.name}`).join('\n') + '\n');
-    await writeFile(join(output, 'release-notes.md'), [
-      `# OwnTake ${tag}`, '',
-      '<!-- lang:zh -->', '## 下载与安装',
-      '文件名采用 `owntake-系统-架构`；amd64 = Intel/AMD 64 位，arm64 = Apple Silicon/ARM64。',
-      'macOS 使用 DMG；Windows 使用 EXE 安装程序；Linux 使用 AppImage。ZIP / tar.gz 是备用便携归档。',
-      'FFmpeg、ffprobe、字幕字体和模型 API Key 不包含在应用包中；首次启动请到设置中配置。',
-      '人物一致性、供应商账号权限和真实收费调用不属于打包验收；安装包不包含你的数据或凭据。', '',
-      '## 校验和与签名',
-      '安装前核对 SHA256SUMS。未配置发行者证书的包明确标为 ad-hoc / unsigned；这不等于通过 Apple 公证或 Windows 可信签名。', '',
-      '| 文件 | 签名状态 |', '| --- | --- |',
-      ...artifacts.map(file => `| \`${file.name}\` | ${file.signing} |`), '',
-      '<!-- lang:en -->', '## Install',
-      'Choose DMG (macOS), EXE (Windows), or AppImage (Linux). amd64 means Intel/AMD x64; arm64 means Apple Silicon/ARM64.',
-      'FFmpeg, ffprobe, fonts and model credentials are configured separately. Verify SHA256SUMS before installation.',
-      'All six native archive builds passed architecture and extracted Electron startup/lifecycle checks. Installer UI flows and trusted signing are separate acceptance checks.', '',
-      '## Changes / 版本变化',
-      '**Maintainer: replace this section with concrete user-visible changes before publishing the draft.**',
-      '**发布草稿前填写本版本可感知的新增、修复、升级注意事项；不要把测试数量当作产品变化。**', '',
-      `Source commit: \`${commit}\``, '',
-    ].join('\n'));
+    await writeFile(join(output, 'release-notes.md'), formatReleaseNotes(release, changes));
     return release;
   } catch (error) { await rm(output, { recursive: true, force: true }); throw error; }
 }

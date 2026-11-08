@@ -23,7 +23,7 @@ Electron `x64` 对应外部 `amd64`；`darwin` 表示 macOS。文件名稳定且
 
 `smoke:package` 解包实际 ZIP/tar.gz，检查 ELF/PE/Mach-O 的 CPU 架构，并启动解包后的真实 Electron 程序，验证生命周期与持久化，不使用开发版本替代。成功后只把本次产物与清单放入待聚合目录。Linux 需图形环境/Xvfb。
 
-最后 `release:assemble` 要求六个目标、十二个产物全齐，版本/提交一致，原生 smoke 已通过且摘要匹配；缺件、重名、多余文件、混版本或损坏均阻止发布。输出 `SHA256SUMS`、`release-manifest.json` 和中英 Release notes 草稿。
+最后 `release:assemble` 要求六个目标、十二个产物全齐，版本/提交一致，原生 smoke 已通过且摘要匹配；缺件、重名、多余文件、混版本或损坏均阻止发布。输出 `SHA256SUMS`、`release-manifest.json` 和中英 Release notes。人工维护的版本变化放在 `docs/releases/v<version>.md`（如 [v0.1.0](../releases/v0.1.0.md)），下载链接、签名状态和源提交由核验后的清单生成。缺失版本文案、错误版本或未完成的占位文字会阻止聚合。
 
 ## 签名与系统信任
 
@@ -35,17 +35,17 @@ PR 构建不传签名/发布密钥。可信发布可在仓库 Secrets 配置：
 | Windows | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | unsigned，无发行者 Authenticode 信任 |
 | Linux | 本流程只提供文件 SHA256 | 不声称发行者数字签名 |
 
-macOS 证书/公证只配置一部分时失败而不降级。清单及说明明确实际签名模式；有成功构建不等于通过 Gatekeeper/SmartScreen。不要指导用户全局关闭安全功能。可信签名、安装器 UI、卸载/升级及目标用户机器仍需独立验收。
+GitHub 未配置的 Secrets 会映射成空字符串；打包入口先将空签名/公证环境项转换为缺省，再加载 electron-builder，防止空证书路径被解析为仓库目录。非空凭据保留原值。macOS 证书/公证只配置一部分时失败而不降级。清单及说明明确实际签名模式；有成功构建不等于通过 Gatekeeper/SmartScreen。不要指导用户全局关闭安全功能。可信签名、安装器 UI、卸载/升级及目标用户机器仍需独立验收。
 
 ## 发布步骤
 
 1. 审阅 PR、所有原生检查与用户可感知的版本变化；确认合入 main。
-2. 按 SemVer 更新 package.json 和 lockfile，提交并验证。签名密钥不进提交。
-3. 维护者明确决定发布后创建 `v<package.json version>` tag。也可用手动工作流选择已存在的同名 tag。
-4. [Release draft workflow](../../.github/workflows/release.yml) 验证 tag 与包版本完全一致，源提交属于 main；从同一提交构建并聚合所有产物，最后创建 **draft**。
-5. 在草稿中用具体新增/修复/升级注意替换占位说明，复核签名、摘要和安装器验收，再人工发布。
+2. 按 SemVer 更新 package.json 和 lockfile，提交同版本的中英变更说明并验证。签名密钥不进提交。
+3. 维护者明确决定发布后创建 `v<package.json version>` tag；推送该 tag 即触发完整发布流程。手动工作流可选择已存在的同名 tag，`publish` 默认关闭以便只创建草稿。需要从 GitHub 页面创建新标签时，选择 `main` 分支并明确启用 `create_tag`；所有包通过检查后才创建指向该次已验证提交的标签，并在同一工作流中继续发布。该入口不移动已有标签。
+4. [Release workflow](../../.github/workflows/release.yml) 验证 tag 与包版本完全一致，源提交属于 main；从同一提交构建并聚合所有产物，然后上传至 **draft**。
+5. 发布入口确认标签仍指向原提交，并逐项核对远端资产文件名、大小及可用 SHA256。只有完整的十二个安装包/归档、`SHA256SUMS` 和 `release-manifest.json` 上传成功，才在 tag 触发或手动明确选中 `publish` 时公开 Release。
 
-这次仓库重构只增加流程，不创建版本 tag，不代表已经向用户发布。工作流拒绝覆盖已有 release，不使用 clobber 自动替换旧资产。失败时保留诊断，修复后针对对应源版本重跑；不要把其他提交构建的单个平台包拼到同一 release。
+普通 PR/main CI 和 electron-builder 不发布，只有 Release 的最终任务具有 `contents: write`，使用 GitHub Actions 提供的仓库令牌，无需额外发布 PAT。工作流拒绝覆盖已有 release，不使用 clobber 自动替换旧资产。上传或核验失败会保留草稿，维护者须先检查该草稿再决定恢复方式；不要移动已发布标签，也不要把其他提交构建的单个平台包拼到同一 release。
 
 ## 验收边界
 
