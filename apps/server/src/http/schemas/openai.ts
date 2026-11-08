@@ -13,3 +13,7 @@ const fields = {
 
 export const OpenAIConnectionInput = Type.Object(fields, { additionalProperties: false });
 export const OpenAIConnectionUpdate = Type.Object({ ...fields, expectedRevision: ExistingRevision }, { additionalProperties: false });
+export const OpenAIModelDiscoveryInput = Type.Object({
+  connectionId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  key: fields.key,
+}, { additionalProperties: false });
