@@ -1,3 +1,4 @@
+import { StoryRepository } from '../../../../packages/storage/src/story-repository.ts';
 import { Store } from '../../../../packages/storage/src/index.ts';
 import { StoryboardStore } from '../../../../packages/storage/src/storyboard.ts';
 import type { ApplicationContext } from '../application/context.ts';
@@ -33,6 +34,7 @@ export async function createCore(config: ServerConfig): Promise<CoreRuntime> {
     const studio = new StudioRepository(store, board, providers, runtimes);
     const context: ApplicationContext = {
       store,
+      stories: new StoryRepository(store),
       board,
       providers,
       generations,

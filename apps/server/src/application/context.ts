@@ -1,3 +1,4 @@
+import type { StoryRepository } from '../../../../packages/storage/src/story-repository.ts';
 import type { Store } from '../../../../packages/storage/src/index.ts';
 import type { StoryboardStore } from '../../../../packages/storage/src/storyboard.ts';
 import type { Scheduler } from '../scheduler.ts';
@@ -12,6 +13,7 @@ import type { StudioRunner } from '../studio-runner.ts';
 
 /** Resources owned by one local core. Individual use cases take only what they need. */
 export interface ApplicationContext {
+  stories: StoryRepository;
   store: Store;
   scheduler: Scheduler;
   board: StoryboardStore;

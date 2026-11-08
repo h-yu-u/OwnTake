@@ -175,6 +175,7 @@ test('legacy version 1 and version 2 manifests without stagedArtifacts still res
       const f = await fixture(sub);
       // Remove newer child tables before their parents; changing user_version alone
       // would leave a v4 database falsely labelled as a legacy backup.
+      f.store.db.exec('DROP TABLE library_story_projects; DROP TABLE library_script_versions; DROP TABLE library_story_versions; DROP TABLE library_stories;');
       f.store.db.exec('DROP TABLE studio_receipts; DROP TABLE studio_frames; DROP TABLE studio_operations; DROP TABLE runtime_profiles; DROP TABLE reviews; DROP TABLE generations;');
       if (version === 1) f.store.db.exec('DROP TABLE storyboard_drafts; DROP TABLE candidates; DROP TABLE shot_revisions; DROP TABLE shots; DROP TABLE boards; DROP TABLE provider_calls; DROP TABLE provider_profiles; DROP INDEX artifacts_identity_project;');
       f.store.db.exec(`PRAGMA user_version=${version}`);
