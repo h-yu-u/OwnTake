@@ -26,6 +26,13 @@ export class OpenAIConnectionRepository {
 
   get(id: string): OpenAIConnectionSummary { return this.summary(this.stored(id)); }
 
+  /** Server-only credential resolution; no key or vault reference is exposed by the HTTP response. */
+  credentialForDiscovery(id: string): string {
+    const stored = this.stored(id);
+    invariant(this.providers.vault.has(stored.credentialRef), 'CREDENTIAL_REQUIRED', '此 OpenAI 连接尚未保存 Key，请先填写。', 409);
+    return this.providers.vault.get(stored.credentialRef);
+  }
+
   list(): OpenAIConnectionSummary[] {
     return this.providers.store.db.prepare('SELECT id FROM openai_connections ORDER BY rowid').all()
       .map(row => this.get(String(row.id)));
