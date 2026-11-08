@@ -46,11 +46,6 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          architecture: ${{ matrix.arch }}
-          cache: npm
       - name: Linux media and desktop test dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk xvfb libfuse2t64
@@ -67,6 +62,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
           $ffmpeg = Get-Command ffmpeg -ErrorAction Stop
           Write-Output $ffmpeg.Source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - name: Verify native Node toolchain
+        run: node -e "if(process.versions.node.split('.')[0]!=='24'||process.arch!=='${{ matrix.arch }}')process.exit(1); console.log(process.version,process.platform,process.arch)"
       - run: node scripts/release/prepare-font.mjs
       - run: npm ci
       - run: npm run test:tooling

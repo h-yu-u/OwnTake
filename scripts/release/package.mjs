@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { artifactNames, assertNative, assertVersion, nativeTarget, targetById } from './targets.mjs';
 import { builderConfiguration, signingMode } from './config.mjs';
 import { digestFile, writeJson } from './integrity.mjs';
+import { installedElectron } from './installed-electron.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const { values } = parseArgs({ options: { target: { type: 'string' }, platform: { type: 'string' } }, strict: true });
@@ -19,6 +20,8 @@ const sourceDirty = Boolean(execFileSync('git', ['status', '--porcelain', '--unt
 if (sourceDirty) throw new Error('Commit tracked changes before producing a release artifact');
 for (const file of ['apps/desktop/dist/main.mjs', 'apps/desktop/dist/preload.cjs', 'apps/desktop/dist/service.mjs', 'apps/web/dist/index.html']) await readFile(file);
 const configuration = builderConfiguration(target, process.env);
+configuration.electronDist = await installedElectron(root, target, pkg.devDependencies.electron);
+configuration.electronVersion = pkg.devDependencies.electron;
 const signing = signingMode(target, process.env);
 console.log(`[package] ${target.id} · ${pkg.version} · ${signing}`);
 if (['unsigned', 'ad-hoc'].includes(signing)) console.warn('[package] No trusted publisher certificate. These artifacts are not notarized/Authenticode-signed.');
