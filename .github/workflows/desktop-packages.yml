@@ -1,0 +1,127 @@
+name: Native desktop packages
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+    secrets:
+      MAC_CSC_LINK:
+        required: false
+      MAC_CSC_KEY_PASSWORD:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_APP_SPECIFIC_PASSWORD:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      WIN_CSC_LINK:
+        required: false
+      WIN_CSC_KEY_PASSWORD:
+        required: false
+permissions:
+  contents: read
+jobs:
+  targets:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - id: matrix
+        run: node scripts/release/matrix.mjs
+  build:
+    needs: targets
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - name: Linux media and desktop test dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk xvfb libfuse2t64
+      - name: macOS media test dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+      - name: Windows media test dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install ffmpeg --yes --no-progress --limit-output
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
+          $ffmpeg = Get-Command ffmpeg -ErrorAction Stop
+          Write-Output $ffmpeg.Source
+      - run: node scripts/release/prepare-font.mjs
+      - run: npm ci
+      - run: npm run test:tooling
+      - run: npm run typecheck
+      - name: Build native installers and portable archive
+        run: npm run package:desktop -- --target ${{ matrix.id }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_LINK: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || matrix.platform == 'win32' && secrets.WIN_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win32' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_TEAM_ID || '' }}
+      - name: Smoke extracted Linux distribution
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum node scripts/release/smoke.mjs --target ${{ matrix.id }}
+        env:
+          OWNTAKE_DESKTOP_TEST_NO_SANDBOX: '1'
+      - name: Smoke extracted macOS or Windows distribution
+        if: runner.os != 'Linux'
+        run: node scripts/release/smoke.mjs --target ${{ matrix.id }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.id }}
+          path: release/ready-${{ matrix.id }}/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-${{ matrix.id }}
+          path: test-results/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+  verify-set:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: package-downloads
+      - name: Validate complete release set
+        run: node scripts/release/assemble.mjs --tag "v$(node -p 'require("./package.json").version')" --output checked-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checked-release-index
+          path: |
+            checked-release/SHA256SUMS
+            checked-release/release-manifest.json
+          if-no-files-found: error
