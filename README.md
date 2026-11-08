@@ -73,6 +73,14 @@ OWNTAKE_DATA_DIR=/absolute/path/to/new-data npm run backup -- restore /absolute/
 
 开发按 P1–P5 分阶段交付；每阶段的实际验证和限制记录在 `docs/validation/`。原型与正式程序分开，原型中的模拟状态不用于证明正式功能已经实现。
 
+## OpenAI 一次配置
+
+使用官方 OpenAI API Key 时，在「设置 → OpenAI → 添加 OpenAI」中填写一次密钥并保存，即可在分镜推理、画面抽样审核、图片生成和配音中选择对应的 OpenAI 能力。默认模型与连接名称可在高级设置中调整；保存配置不会调用模型，也不代表账户权限已实测。
+
+同一个 OpenAI 连接的三类能力共用一份凭据，更新密钥时一起更新；已提交的任务继续保留原模型和凭据引用。「协议兼容连接」继续支持单独配置 Chat Completions、OpenAI Images、Ark 视频和 Speech 兼容服务，现有连接可继续使用。
+
+当前官方配音使用 Speech API。OpenAI 已公布现有 TTS 系列于 **2027-01-06** 停服，后续需升级语音适配器，不能把 Realtime 模型 ID 直接填入 Speech 接口。配置方法、默认值与验证范围见 [OpenAI 统一连接说明](docs/validation/openai-connection.md)。
+
 ## 分镜与可选推理
 
 「分镜」支持手工镜头、候选选择、版本和修改草稿；「设置」可添加支持严格 JSON Schema 的 Chat Completions 连接。模型建议需逐项审阅后应用。推理调用前会冻结简报/分镜版本并预留用户填写的额度，响应不明不自动重发；金额不等于供应商账单。实际配置要求和流程见 [P2 说明](docs/validation/p2.md)。

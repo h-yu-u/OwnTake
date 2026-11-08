@@ -3,6 +3,7 @@ import type { Store } from '../../../../packages/storage/src/index.ts';
 import type { StoryboardStore } from '../../../../packages/storage/src/storyboard.ts';
 import type { Scheduler } from '../scheduler.ts';
 import type { ProviderRepository } from '../provider-repository.ts';
+import type { OpenAIConnectionRepository } from '../openai-connection-repository.ts';
 import type { ModelRunner } from '../model-runner.ts';
 import type { GenerationRepository } from '../generation-repository.ts';
 import type { GenerationRunner } from '../generation-runner.ts';
@@ -18,6 +19,7 @@ export interface ApplicationContext {
   scheduler: Scheduler;
   board: StoryboardStore;
   providers: ProviderRepository;
+  openaiConnections: OpenAIConnectionRepository;
   models: ModelRunner;
   generations: GenerationRepository;
   generationRunner: GenerationRunner;

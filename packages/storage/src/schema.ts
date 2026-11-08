@@ -5,8 +5,9 @@ import { providerSchema } from './provider-schema.ts';
 import { generationSchema } from './generation-schema.ts';
 import { studioSchema } from './studio-schema.ts';
 import { storySchema } from './story-schema.ts';
+import { openaiSchema } from './openai-schema.ts';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 const schema = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -67,6 +68,7 @@ export function initializeSchema(db: DatabaseSync): void {
     if (current < 3) db.exec(generationSchema);
     if (current < 4) db.exec(studioSchema);
     if (current < 5) db.exec(storySchema);
+    if (current < 6) db.exec(openaiSchema);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {

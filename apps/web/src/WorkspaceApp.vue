@@ -6,8 +6,10 @@ import { api, errorMessage } from './lib/api.ts';
 import { renewDraftOperations } from './lib/storyboard.ts';
 import { storyboardApi } from './lib/storyboardApi.ts';
 import type { ProviderInput } from './lib/providerApi.ts';
+import type { OpenAIConnectionSave } from './lib/openaiApi.ts';
 import { useWorkspace } from './composables/useWorkspace.ts';
 import { useStoryboard } from './composables/useStoryboard.ts';
+import { useOpenAIConnections } from './composables/useOpenAIConnections.ts';
 import { useGenerations } from './composables/useGenerations.ts';
 import { useStudio } from './composables/useStudio.ts';
 import { useDesktop } from './composables/useDesktop.ts';
@@ -40,7 +42,9 @@ const revealingArtifact = ref<string | null>(null);
 const workspace = useWorkspace();
 const { projects, snapshot, draft, draftBaseVersion, dirty, health, settings, loading, saving, creating, exporting, importing, busy, connection, connectionError, problems, runningCount } = workspace;
 const storyboard = useStoryboard(snapshot);
-const { board, calls, providers, loading: boardLoading, mutating: boardBusy, loadError: boardError, editorMode, selectedId, selectedShot, fields: editorFields, shots, editorDirty, editorBaseRevision, editorConflict } = storyboard;
+const { board, calls, providers, providerSavedRevision, loading: boardLoading, mutating: boardBusy, loadError: boardError, editorMode, selectedId, selectedShot, fields: editorFields, shots, editorDirty, editorBaseRevision, editorConflict } = storyboard;
+const openai = useOpenAIConnections();
+const { connections: openaiConnections, loading: openaiLoading, saving: openaiSaving, savedRevision: openaiSavedRevision, error: openaiError } = openai;
 const generation = useGenerations(snapshot);
 const { records: generationRecords, reviews, busy: generationBusy, error: generationError } = generation;
 const studio = useStudio(snapshot);
@@ -69,13 +73,13 @@ const checkingHealth = ref(false);
 const restoring = ref(false);
 const previewRevision = ref(0);
 const cancelling = ref<string[]>([]);
-const disabled = computed(() => busy.value || boardBusy.value || generationBusy.value || studioBusy.value || savingProject.value || creatingBoardTimeline.value || restoring.value || savingSettings.value || connection.value === 'offline');
+const disabled = computed(() => busy.value || boardBusy.value || openaiSaving.value || generationBusy.value || studioBusy.value || savingProject.value || creatingBoardTimeline.value || restoring.value || savingSettings.value || connection.value === 'offline');
 const projectOptions = computed(() => projects.value.map(project => ({ label: project.name, value: project.id })));
 const connectionLabel = computed(() => connection.value === 'offline' ? '本地服务离线' : connection.value === 'connecting' ? '正在连接' : health.value?.status === 'degraded' ? '媒体工具待设置' : '本地工作台已就绪');
 
 watch(view, next => { window.history.replaceState(null, '', `#${next}`); });
 watch(() => snapshot.value?.project.name, name => { document.title = name ? `${name} · OwnTake` : 'OwnTake · 自己的片场'; });
-onMounted(async () => { await workspace.initialize(); await perform(async () => { await Promise.all([storyboard.loadProviders(), studio.loadRuntimes()]); }); initialized.value = true; });
+onMounted(async () => { await workspace.initialize(); await perform(async () => { await Promise.all([storyboard.loadProviders(), openai.loadConnections(), studio.loadRuntimes()]); }); initialized.value = true; });
 
 async function perform(action: () => Promise<unknown>, success?: string): Promise<boolean> {
   actionError.value = '';
@@ -154,6 +158,18 @@ async function createDraft(operations: DraftOperation[]) { if (await perform(() 
 async function renewDraft(id: string) { const existing = board.value?.drafts.find(item => item.id === id); if (existing) await createDraft(renewDraftOperations(existing)); }
 async function applyDraft(input: { id: string; acceptedOperationIds: string[] }) { await perform(() => storyboard.applyDraft(input.id, input.acceptedOperationIds), `已应用 ${input.acceptedOperationIds.length} 项变更`); }
 async function saveProvider(input: { id: string | null; profile: ProviderInput }) { await perform(() => storyboard.saveProvider(input.id, input.profile), '连接已保存，尚未发起模型请求'); }
+async function saveOpenAIConnection(input: OpenAIConnectionSave) {
+  if (!await perform(() => openai.saveConnection(input), 'OpenAI 连接已保存，推理、生图与配音共用此 Key')) return;
+  try { await storyboard.loadProviders(); }
+  catch {
+    const notice = 'OpenAI 连接已保存，但创作能力列表暂未刷新。请在 OpenAI 设置中点击刷新。';
+    openai.error.value = notice;
+    message.warning(notice, { duration: 7000 });
+  }
+}
+async function refreshOpenAIConnections() {
+  await perform(async () => { await Promise.all([openai.loadConnections(), storyboard.loadProviders()]); });
+}
 function openReasoning() {
   if (!snapshot.value?.project.brief.trim()) { message.info('先写下创作简报，再让模型提出分镜建议。'); projectDetailsDialog.value = true; return; }
   reasoningDialog.value = true;
@@ -240,7 +256,7 @@ async function revealArtifact(id: string) {
       <template v-else>
         <StoryLibraryView v-if="view === 'stories'" @project-created="onStoryProjectCreated" />
         <ProjectsView v-else-if="view === 'projects'" :projects="projects" :active-id="snapshot?.project.id" :disabled="disabled" @create="openCreate" @select="chooseProject" />
-        <SettingsView v-else-if="view === 'settings'" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="desktop.refresh" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
+        <SettingsView v-else-if="view === 'settings'" :provider-saved-revision="providerSavedRevision" :openai-connections="openaiConnections" :openai-loading="openaiLoading" :openai-saving="openaiSaving" :openai-saved-revision="openaiSavedRevision" :openai-error="openaiError" @save-openai="saveOpenAIConnection" @refresh-openai="refreshOpenAIConnections" @clear-openai-error="openai.clearError" :settings="settings" :health="health" :disabled="disabled" :saving="savingSettings" :checking="checkingHealth" :providers="providers" :runtimes="runtimes" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="desktop.refresh" @save="saveSettings" @check="checkHealth" @save-provider="saveProvider" @refresh-providers="perform(() => storyboard.loadProviders())" @save-runtime="saveRuntime" @refresh-runtimes="perform(() => studio.loadRuntimes())" />
         <EmptyState v-else-if="!snapshot" title="先为作品留一个位置" description="新建或打开一个项目，再开始导入素材、安排画面与导出。" icon="projects"><NButton type="primary" :disabled="disabled" @click="openCreate">新建项目</NButton><NButton @click="view = 'projects'">查看作品</NButton></EmptyState>
         <StoryboardView v-else-if="view === 'storyboard'" :snapshot="snapshot" :board="board" :shots="shots" :selected-shot="selectedShot" :selected-id="selectedId" :fields="editorFields" :editor-mode="editorMode" :editor-dirty="editorDirty" :editor-conflict="editorConflict" :editor-base-revision="editorBaseRevision" :disabled="disabled" :loading="boardLoading" :error="boardError" :calls="calls" :providers="providers" :reviews="reviews" :review-revision="reviewRevision" @update:fields="editorFields = $event" @create="createShot" @select="chooseShot" @save="perform(() => storyboard.saveShot(), '镜头已保存')" @archive="archiveShot" @move="perform(() => storyboard.moveShot($event.id, $event.direction))" @add-candidate="perform(() => storyboard.addCandidate($event), '素材已加入当前视觉版本的候选')" @select-candidate="selectCandidate" @assets="view = 'workbench'" @timeline="saveBoardTimeline" @refresh="perform(() => storyboard.refresh())" @reload-editor="reloadShot" @create-draft="draftComposer = true" @apply-draft="applyDraft" @renew-draft="renewDraft" @reasoning="openReasoning" @generate="openGeneration" @review="saveHumanReview" @details="projectDetailsDialog = true" @settle="settleCall" />
         <WorkbenchView v-else-if="view === 'workbench'" :snapshot="snapshot" :draft="draft" :dirty="dirty" :version="draftBaseVersion" :preview-revision="previewRevision" :disabled="disabled" :saving="saving" :importing="importing" :problems="problems" @update:draft="draft = $event" @import="importFiles" @restore="restoreAsset" @save="saveTimeline" @export="view = 'export'" @reload="reloadTimeline" @settings="view = 'settings'" />

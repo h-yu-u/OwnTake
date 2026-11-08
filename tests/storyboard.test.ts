@@ -233,6 +233,7 @@ test('version 1 data and backups upgrade transactionally to the current schema w
   const media = asset(store, project.id);
   const job = store.createJob({ projectId: project.id, type: 'render', payload: {}, dedupeKey: 'legacy-job' });
   // Recreate the exact P1 table set, retaining actual P1 records, constraints and files.
+  store.db.exec('DROP TABLE openai_connection_profiles; DROP TABLE openai_connections;');
   store.db.exec('DROP TABLE library_story_projects; DROP TABLE library_script_versions; DROP TABLE library_story_versions; DROP TABLE library_stories;');
   store.db.exec('DROP TABLE studio_receipts; DROP TABLE studio_frames; DROP TABLE studio_operations; DROP TABLE runtime_profiles; DROP TABLE reviews; DROP TABLE generations;');
   store.db.exec('DROP TABLE storyboard_drafts; DROP TABLE candidates; DROP TABLE shot_revisions; DROP TABLE shots; DROP TABLE boards; DROP TABLE provider_calls; DROP TABLE provider_profiles; DROP INDEX artifacts_identity_project; PRAGMA user_version=1;');
@@ -248,6 +249,8 @@ test('version 1 data and backups upgrade transactionally to the current schema w
     assert.equal(migrated.getJob(job.id).status, 'queued');
     assert.equal(new StoryboardStore(migrated).snapshot(project.id).revision, 0);
     assert.equal(migrated.db.prepare('SELECT COUNT(*) AS count FROM provider_calls').get()?.count, 0);
+    assert.equal(migrated.db.prepare('SELECT COUNT(*) AS count FROM openai_connections').get()?.count, 0);
+    assert.equal(migrated.db.prepare('SELECT COUNT(*) AS count FROM openai_connection_profiles').get()?.count, 0);
   } finally { migrated.close(); }
   const manifestPath = join(backup, 'manifest.json');
   writeFileSync(manifestPath, JSON.stringify({ ...manifest, schemaVersion: SCHEMA_VERSION }));

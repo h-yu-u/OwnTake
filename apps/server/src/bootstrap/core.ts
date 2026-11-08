@@ -6,6 +6,7 @@ import type { ServerConfig } from '../config.ts';
 import { acquireLock } from '../instance-lock.ts';
 import { Scheduler } from '../scheduler.ts';
 import { ProviderRepository } from '../provider-repository.ts';
+import { OpenAIConnectionRepository } from '../openai-connection-repository.ts';
 import { ModelRunner } from '../model-runner.ts';
 import { GenerationRepository } from '../generation-repository.ts';
 import { GenerationRunner } from '../generation-runner.ts';
@@ -37,6 +38,7 @@ export async function createCore(config: ServerConfig): Promise<CoreRuntime> {
       stories: new StoryRepository(store),
       board,
       providers,
+      openaiConnections: new OpenAIConnectionRepository(providers),
       generations,
       runtimes,
       studio,

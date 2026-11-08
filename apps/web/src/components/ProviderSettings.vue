@@ -7,8 +7,9 @@ import { inputModeOptions, parseDurationChoices, ratioOptions } from '../lib/gen
 import { parseVoiceChoices } from '../lib/studio.ts';
 import AppIcon from './AppIcon.vue';
 
-const props = defineProps<{ providers: ProviderSummary[]; disabled: boolean }>();
+const props = defineProps<{ providers: ProviderSummary[]; savedRevision: number; disabled: boolean }>();
 const emit = defineEmits<{ save: [input: { id: string | null; profile: ProviderInput }]; refresh: [] }>();
+const compatibleProviders = computed(() => props.providers.filter(provider => !provider.connectionId));
 const show = ref(false);
 const editing = ref<ProviderSummary | null>(null);
 const connectionForm = ref({ label: '', kind: 'chat-completions' as ProviderKind, baseUrl: 'https://api.openai.com/v1', model: '', key: '', maxOutputTokens: 4096, timeoutMs: 60000,
@@ -47,7 +48,7 @@ function changeKind(kind: ProviderKind) {
     baseUrl: knownDefaults.includes(value.baseUrl) ? kind === 'ark-video' ? knownDefaults[1]! : knownDefaults[0]! : value.baseUrl,
     inputModes: ['text'], ratios: ['chat-completions', 'openai-speech'].includes(kind) ? [] : ['16:9'], durationChoices: kind === 'ark-video' ? '5' : '', maxReferences: 0, frameReviewEnabled: false };
 }
-watch(() => props.providers, () => { if (show.value) { show.value = false; connectionForm.value.key = ''; } });
+watch(() => props.savedRevision, () => { if (show.value) { show.value = false; connectionForm.value.key = ''; } });
 watch(show, value => { if (!value) connectionForm.value.key = ''; });
 function save() {
   if (!valid.value || props.disabled) return;
@@ -63,11 +64,11 @@ function save() {
 
 <template>
   <section class="panel provider-settings">
-    <div class="panel-heading"><div><h2>模型连接与能力声明</h2><p class="subheading">按推理、图片、视频、配音与抽样审核所需的能力配置连接。</p></div><div class="heading-line"><NButton text size="small" :disabled="disabled" @click="emit('refresh')">刷新</NButton><NButton :disabled="disabled" @click="open(null)"><template #icon><AppIcon name="plus" :size="16" /></template>添加连接</NButton></div></div>
-    <p v-if="!providers.length" class="draft-empty">手工分镜与导入素材始终可用。配置连接后，可审阅并提交相应请求。</p>
-    <div v-else class="provider-list"><article v-for="provider in providers" :key="provider.id" class="provider-row"><div class="provider-symbol"><AppIcon :name="provider.kind === 'chat-completions' ? 'storyboard' : provider.kind === 'openai-images' ? 'image' : provider.kind === 'openai-speech' ? 'audio' : 'film'" :size="22" /></div><div class="provider-copy"><div class="heading-line"><strong>{{ provider.label }}</strong><NTag size="small" :bordered="false">{{ kindLabel(provider.kind) }}</NTag><NTag size="small" :bordered="false" type="warning">尚未实接验证</NTag><NTag size="small" :bordered="false" :type="provider.hasKey ? 'success' : 'default'">{{ provider.hasKey ? '已保存密钥' : '未配置密钥' }}</NTag></div><p>{{ provider.model }} · {{ provider.timeoutMs / 1000 }} 秒请求超时<span v-if="provider.kind === 'chat-completions'"> · 最多 {{ provider.maxOutputTokens }} 输出 tokens</span></p><p v-if="provider.capabilities.speech">声明：{{ provider.capabilities.speech.voices.join(' / ') }} · {{ provider.capabilities.speech.minSpeed }}–{{ provider.capabilities.speech.maxSpeed }} 倍速 · 最多 {{ provider.capabilities.speech.maxInputChars }} 字符 · WAV</p><p v-if="provider.capabilities.frameReview">声明：可读图片并返回严格 JSON 结构，最多 {{ provider.capabilities.frameReview.maxImages }} 帧</p><p v-if="provider.kind === 'openai-images' || provider.kind === 'ark-video'">声明：{{ provider.capabilities.inputModes.map(mode => inputModeOptions.find(option => option.value === mode)?.label).join(' / ') }} · {{ provider.capabilities.ratios.join(' / ') }}<span v-if="provider.capabilities.durationsSec.length"> · {{ provider.capabilities.durationsSec.join(' / ') }} 秒</span></p><code>{{ provider.baseUrl }}</code></div><NButton size="small" :disabled="disabled" @click="open(provider)">编辑</NButton></article></div>
+    <div class="panel-heading"><div><h2>协议兼容连接</h2><p class="subheading">按协议配置第三方或本地服务，分别指定模型与能力。</p></div><div class="heading-line"><NButton text size="small" :disabled="disabled" @click="emit('refresh')">刷新</NButton><NButton :disabled="disabled" @click="open(null)"><template #icon><AppIcon name="plus" :size="16" /></template>添加兼容连接</NButton></div></div>
+    <p v-if="!compatibleProviders.length" class="draft-empty">需要接入第三方或本地模型时，在这里添加兼容连接。</p>
+    <div v-else class="provider-list"><article v-for="provider in compatibleProviders" :key="provider.id" class="provider-row"><div class="provider-symbol"><AppIcon :name="provider.kind === 'chat-completions' ? 'storyboard' : provider.kind === 'openai-images' ? 'image' : provider.kind === 'openai-speech' ? 'audio' : 'film'" :size="22" /></div><div class="provider-copy"><div class="heading-line"><strong>{{ provider.label }}</strong><NTag size="small" :bordered="false">{{ kindLabel(provider.kind) }}</NTag><NTag size="small" :bordered="false" type="warning">尚未实接验证</NTag><NTag size="small" :bordered="false" :type="provider.hasKey ? 'success' : 'default'">{{ provider.hasKey ? '已保存密钥' : '未配置密钥' }}</NTag></div><p>{{ provider.model }} · {{ provider.timeoutMs / 1000 }} 秒请求超时<span v-if="provider.kind === 'chat-completions'"> · 最多 {{ provider.maxOutputTokens }} 输出 tokens</span></p><p v-if="provider.capabilities.speech">声明：{{ provider.capabilities.speech.voices.join(' / ') }} · {{ provider.capabilities.speech.minSpeed }}–{{ provider.capabilities.speech.maxSpeed }} 倍速 · 最多 {{ provider.capabilities.speech.maxInputChars }} 字符 · WAV</p><p v-if="provider.capabilities.frameReview">声明：可读图片并返回严格 JSON 结构，最多 {{ provider.capabilities.frameReview.maxImages }} 帧</p><p v-if="provider.kind === 'openai-images' || provider.kind === 'ark-video'">声明：{{ provider.capabilities.inputModes.map(mode => inputModeOptions.find(option => option.value === mode)?.label).join(' / ') }} · {{ provider.capabilities.ratios.join(' / ') }}<span v-if="provider.capabilities.durationsSec.length"> · {{ provider.capabilities.durationsSec.join(' / ') }} 秒</span></p><code>{{ provider.baseUrl }}</code></div><NButton size="small" :disabled="disabled" @click="open(provider)">编辑</NButton></article></div>
     <p class="panel-footnote">保存连接不会发起付费请求。能力由你声明，实际端点、模型权限、模型有效期与结果需通过真实使用核验。</p>
-    <NModal v-model:show="show" preset="card" :title="editing ? '编辑模型连接' : '添加模型连接'" class="provider-modal" :mask-closable="!disabled" :closable="!disabled">
+    <NModal v-model:show="show" preset="card" :title="editing ? '编辑兼容连接' : '添加兼容连接'" class="provider-modal" :mask-closable="!disabled" :closable="!disabled">
       <NForm @submit.prevent="save">
         <NFormItem label="连接类型"><NSelect aria-label="连接类型" :input-props="{ 'aria-label': '连接类型' }" :value="connectionForm.kind" :options="kinds" :disabled="disabled" @update:value="changeKind" /></NFormItem>
         <NFormItem label="连接名称"><NInput :input-props="{ 'aria-label': '连接名称' }" v-model:value="connectionForm.label" :maxlength="100" :disabled="disabled" placeholder="给这个模型连接起一个便于辨认的名字" /></NFormItem>

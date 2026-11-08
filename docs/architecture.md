@@ -227,6 +227,14 @@ interface ModelProvider {
 
 P3 只需接稳实际要用的图片和视频供应商，再用一个能力不同的模拟适配器验证可替换性，不以接入大量厂商作为 MVP 门槛。
 
+#### OpenAI 统一连接
+
+设置页提供按官方账号配置的 OpenAI 入口。一个 `OpenAIConnection` 管理推理、图片、语音三个稳定的 `ProviderProfile`，共用一个不可变凭据引用；模型选择与协议执行继续分离，已有 Runner、生成计划、费用预留和候选选择流程复用原有协议适配器。
+
+数据库 schema 6 使用 `openai_connections` 与 `openai_connection_profiles` 维护账号和能力的归属。更新账号以 `expectedRevision` 检查并发修改，在一个 SQLite 事务内更新三个 profile。换 Key 只新增一份凭据版本，并同时更新三个未来调用目标；已冻结任务仍保留原 profile 和凭据引用。受管理的 profile 不能从旧单协议编辑接口单独改写。
+
+官方入口固定使用 OpenAI 的 API 来源；第三方 Base URL 与自定义能力继续由协议兼容入口配置。公共 DTO 只暴露是否已保存密钥，凭据明文继续保存在私有 vault，数据库和项目备份不包含密钥。保存配置不发起模型调用，连接状态仍为未实测。具体默认值、官方生命周期与验证记录见 [OpenAI 统一连接说明](validation/openai-connection.md)。
+
 ### 4.2 AgentRuntime：有界任务执行与结构化结果
 
 运行时负责上下文、工具循环、权限、超时、会话和产出，不等价于一个模型名称。Native 运行时可以调用任意符合推理和结构化输出要求的 `ModelProvider`；Claude Code / Codex 则有自己的运行时及认证语义，按官方合同单独适配，不能仅替换 `baseURL`。

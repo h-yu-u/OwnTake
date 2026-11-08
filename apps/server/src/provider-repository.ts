@@ -35,16 +35,31 @@ export class ProviderRepository {
     return { profile: JSON.parse(String(row.body_json)) as ProviderProfile, credentialRef: row.credential_ref ? String(row.credential_ref) : null };
   }
   listProfiles(): ProviderSummary[] {
-    return this.store.db.prepare('SELECT * FROM provider_profiles ORDER BY rowid').all().map(row => ({ ...JSON.parse(String(row.body_json)) as ProviderProfile, hasKey: this.vault.has(row.credential_ref ? String(row.credential_ref) : null), verification: 'unverified' }));
+    return this.store.db.prepare(`SELECT p.*, managed.connection_id FROM provider_profiles p
+      LEFT JOIN openai_connection_profiles managed ON managed.provider_id=p.id ORDER BY p.rowid`).all().map(row => ({
+      ...JSON.parse(String(row.body_json)) as ProviderProfile,
+      hasKey: this.vault.has(row.credential_ref ? String(row.credential_ref) : null),
+      verification: 'unverified',
+      ...(row.connection_id ? { connectionId: String(row.connection_id) } : {}),
+    }));
+  }
+  /** Internal persistence boundary; shared-account updates supply one immutable key reference. */
+  persistProfile(profile: ProviderProfile, credentialRef: string | null): void {
+    this.store.db.prepare('INSERT INTO provider_profiles(id,body_json,credential_ref) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET body_json=excluded.body_json,credential_ref=excluded.credential_ref').run(profile.id, JSON.stringify(profile), credentialRef);
   }
   saveProfile(value: unknown, existingId?: string): ProviderSummary {
+    if (existingId) {
+      resourceId(existingId);
+      invariant(!this.store.db.prepare('SELECT 1 FROM openai_connection_profiles WHERE provider_id=?').get(existingId),
+        'MANAGED_PROVIDER', '此能力由 OpenAI 连接统一管理，请在 OpenAI 入口修改密钥或模型。', 409);
+    }
     const body = record(value), { key, ...data } = body;
     const existing = existingId ? this.getProfile(existingId) : undefined, id = existingId ?? randomUUID(), now = new Date().toISOString();
     const profile = validateProfile({ ...data, id, createdAt: existing?.profile.createdAt ?? now, updatedAt: now });
     invariant(key === undefined || typeof key === 'string', 'INVALID_KEY', 'API 密钥必须是文本');
     invariant(!existing || new URL(existing.profile.baseUrl).origin === new URL(profile.baseUrl).origin || !this.vault.has(existing.credentialRef) || typeof key === 'string' && key.trim().length > 0, 'NEW_ORIGIN_KEY_REQUIRED', '连接地址已更换服务来源，请重新填写该服务的密钥；原密钥不会发送到新来源');
     const credentialRef = typeof key === 'string' && key.trim() ? this.vault.put(key.trim()) : existing?.credentialRef ?? null;
-    this.store.db.prepare('INSERT INTO provider_profiles(id,body_json,credential_ref) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET body_json=excluded.body_json,credential_ref=excluded.credential_ref').run(id, JSON.stringify(profile), credentialRef);
+    this.persistProfile(profile, credentialRef);
     return { ...profile, hasKey: this.vault.has(credentialRef), verification: 'unverified' };
   }
   getCall(id: string): StoredCall {
