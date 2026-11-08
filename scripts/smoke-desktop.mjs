@@ -20,7 +20,8 @@ const unsafeSandbox = process.env.OWNTAKE_DESKTOP_TEST_NO_SANDBOX === '1';
 const headless = process.platform === 'linux' && process.env.OWNTAKE_DESKTOP_HEADLESS !== '0'
   && (process.env.OWNTAKE_DESKTOP_HEADLESS === '1' || !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY);
 const flags = [...(headless ? ['--ozone-platform=headless'] : []), ...(unsafeSandbox ? ['--no-sandbox'] : [])];
-const pageErrors = [], remoteRequests = [];
+const pageErrors = [], remoteRequests = [], failedResponses = [];
+let currentPage;
 let application, child, temporary, success = false;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const step = text => console.log(`[desktop-smoke] ${text}`);
@@ -56,11 +57,11 @@ async function launch(env) {
     }
     return route.continue();
   });
-  const page=await application.firstWindow({timeout:35000});
+  const page=await application.firstWindow({timeout:35000}); currentPage=page;
+  page.on('response',response=>{if(response.status()>=400)failedResponses.push({path:new URL(response.url()).pathname,status:response.status()});});
   page.setDefaultTimeout(15000);
   page.on('pageerror',error=>pageErrors.push(error.message));
   page.on('crash',()=>pageErrors.push('Renderer crashed'));
-  // A consistent visible work area avoids machine-specific desktop/window defaults.
   await application.evaluate(({BrowserWindow})=>{
     const window=BrowserWindow.getAllWindows()[0]; window.setContentSize(1280,800); window.show();
   });
@@ -77,10 +78,12 @@ async function launch(env) {
 async function clickVisible(locator) {
   await locator.waitFor({state:'visible'});
   await locator.scrollIntoViewIfNeeded();
-  await locator.click(); // Never force hidden/disabled controls or call their JS handlers.
+  await locator.click();
 }
 async function navigate(page,label) {
-  await clickVisible(page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:label,exact:true}));
+  const button=page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:label,exact:true});
+  await clickVisible(button);
+  await until(()=>button.getAttribute('aria-current'),value=>value==='page',`${label} navigation selected`);
 }
 async function session(coreUrl) {
   const bootstrap=await fetch(coreUrl+'/api/session',{signal:AbortSignal.timeout(10000)});
@@ -183,12 +186,16 @@ try {
   const health=await api.json('/api/health'); assert.ok(health.ffmpeg.available&&health.ffprobe.available);
   assert.equal(await realpath(health.dataDir),await realpath(dataDir));
   step('Real media, project UI and background export');
-  // Core setup is explicit; UI navigation uses the current project cards, not ambiguous duplicate "new project" buttons.
   const project=await api.json('/api/projects',{method:'POST',expected:201,body:{name:`Desktop smoke ${randomUUID().slice(0,8)}`,brief:'Local fixture; no paid provider',ratio:'16:9'}});
   const source=await api.json(`/api/projects/${project.id}/assets?name=${encodeURIComponent('桌面 clip.mp4')}`,{method:'POST',expected:201,raw:true,body:bytes});
   assert.equal(source.sha256,digest(bytes)); assert.equal(source.kind,'video');
   const timeline=await api.json(`/api/projects/${project.id}/timeline`,{method:'PUT',body:{expectedVersion:0,width:320,height:180,fps:24,clips:[{artifactId:source.id,sourceInMs:0,durationMs:1500,fit:'contain',muteSource:false}],captions:[],audio:[]}});
-  await page.reload({waitUntil:'domcontentloaded'}); await page.locator('.initial-loading').waitFor({state:'detached'});
+  const reloadedProjects=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname==='/api/projects');
+  await page.reload({waitUntil:'domcontentloaded'});
+  const projectList=await reloadedProjects;
+  assert.equal(projectList.status(),200);
+  assert.ok((await projectList.json()).some(item=>item.id===project.id),'Reloaded UI received its project');
+  await page.waitForFunction(()=>!document.querySelector('.initial-loading')&&document.querySelector('.open-project-folder'));
   await openExport(page,project.name);
   await clickVisible(page.getByRole('button',{name:'打开当前项目目录',exact:true}));
   const directory=await realpath(join(projectsDir,project.id));
@@ -227,8 +234,17 @@ try {
   await openExport(second.page,project.name); await noPaidCalls(reopened,project.id); await quit(dataDir,second.info.coreUrl);
   assert.deepEqual(pageErrors,[]); assert.deepEqual(remoteRequests,[]); success=true;
   step(`PASS ${process.platform}/${process.arch}, ${packaged?'extracted package':'source build'}; real media, isolation, background export and restart`);
-} catch(error) { console.error('[desktop-smoke] FAIL',error.stack||error); process.exitCode=1; }
+} catch(error) {
+  console.error('[desktop-smoke] FAIL',error.stack||error);
+  console.error('[desktop-smoke] Renderer errors:',JSON.stringify(pageErrors),'HTTP failures:',JSON.stringify(failedResponses));
+  if(currentPage&&!currentPage.isClosed()){
+    console.error('[desktop-smoke] Current fixture UI:',await currentPage.locator('body').innerText().catch(()=>'<unavailable>'));
+    const failureScreenshot=screenshot||join(root,'test-results','desktop-failure.png');
+    await mkdir(dirname(failureScreenshot),{recursive:true});
+    await currentPage.screenshot({path:failureScreenshot,fullPage:true}).catch(()=>undefined);
+  }
+  process.exitCode=1;
+}
 finally {
   if(application){try{await application.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});await application.close();}catch{child?.kill('SIGKILL');}}
   if(temporary){if(success)await rm(temporary,{recursive:true,force:true});else console.error(`[desktop-smoke] Fixture retained: ${temporary}`);}
-}
