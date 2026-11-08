@@ -16,6 +16,7 @@ OwnTake 是一个在自己电脑上运行的 AI 短片工作台：从创意和�
 | [原型入口](prototype/index.html) | 无外部依赖的 HTML / CSS / JavaScript 原型 | 本地打开后操作 |
 | [技术架构](architecture.md) | 进程边界、数据模型、适配合同、任务状态、API、媒体管线与恢复 | 开始实现前阅读 |
 | [Fastify 迁移](validation/fastify.md) | HTTP / 应用分层、配置、插件、兼容性和实际验证 | 扩展或维护服务端 |
+| [OpenAI 统一连接](validation/openai-connection.md) | 一次配置 Key、能力默认值、凭据轮换与协议兼容入口 | 配置或维护模型连接 |
 | [实施总计划](implementation-plan.md) | 阶段依赖、每阶段出口与 MVP 边界 | 安排开发顺序 |
 | [资料与设计依据](sources.md) | 官方资料、供应商能力核验原则及设计假设 | 接入真实模型时查阅 |
 

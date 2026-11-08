@@ -11,6 +11,7 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
   const board = ref<BoardSnapshot | null>(null);
   const calls = ref<CallRecord[]>([]);
   const providers = ref<ProviderSummary[]>([]);
+  const providerSavedRevision = ref(0);
   const loading = ref(false);
   const mutating = ref(false);
   const loadError = ref('');
@@ -24,6 +25,7 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
   const editorDirty = computed(() => editorMode.value !== 'empty' && JSON.stringify(fields.value) !== editorBaseline.value);
   const editorConflict = computed(() => editorMode.value === 'existing' && (!selectedShot.value || selectedShot.value.archived || selectedShot.value.revision !== editorBaseRevision.value));
   let requestSequence = 0;
+  let providerRequestSequence = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -55,7 +57,11 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
       acceptBoard(next); calls.value = records; loadError.value = '';
     } catch (error) { if (sequence === requestSequence && !disposed) loadError.value = errorMessage(error); throw error; }
   }
-  async function loadProviders() { providers.value = await providerApi.list(); }
+  async function loadProviders() {
+    const sequence = ++providerRequestSequence;
+    const next = await providerApi.list();
+    if (!disposed && sequence === providerRequestSequence) providers.value = next;
+  }
   watch(() => [project.value?.project.id, project.value?.eventCursor] as const, async (next, previous) => {
     if (refreshTimer) clearTimeout(refreshTimer);
     if (!next[0]) return;
@@ -111,7 +117,15 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
     return mutate(async () => acceptBoard(await storyboardApi.applyDraft(id, acceptedOperationIds, board.value!.revision)));
   }
   async function saveProvider(id: string | null, input: ProviderInput) {
-    return mutate(async () => { const saved = id ? await providerApi.update(id, input) : await providerApi.create(input); providers.value = [saved, ...providers.value.filter(provider => provider.id !== saved.id)]; });
+    ++providerRequestSequence;
+    return mutate(async () => {
+      const saved = id ? await providerApi.update(id, input) : await providerApi.create(input);
+      if (!disposed) {
+        ++providerRequestSequence;
+        providers.value = [saved, ...providers.value.filter(provider => provider.id !== saved.id)];
+        providerSavedRevision.value++;
+      }
+    });
   }
   async function requestReasoning(providerId: string, reservation: Reservation, clientRequestId: string, expectedProviderUpdatedAt: string) {
     if (!board.value) return;
@@ -128,7 +142,7 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
   }
   function beforeUnload(event: BeforeUnloadEvent) { if (editorDirty.value) { event.preventDefault(); event.returnValue = ''; } }
   window.addEventListener('beforeunload', beforeUnload);
-  onBeforeUnmount(() => { disposed = true; ++requestSequence; if (refreshTimer) clearTimeout(refreshTimer); window.removeEventListener('beforeunload', beforeUnload); });
-  return { board, calls, providers, loading, mutating, loadError, editorMode, selectedId, selectedShot, fields, shots, editorDirty, editorBaseRevision, editorConflict,
+  onBeforeUnmount(() => { disposed = true; ++requestSequence; ++providerRequestSequence; if (refreshTimer) clearTimeout(refreshTimer); window.removeEventListener('beforeunload', beforeUnload); });
+  return { board, calls, providers, providerSavedRevision, loading, mutating, loadError, editorMode, selectedId, selectedShot, fields, shots, editorDirty, editorBaseRevision, editorConflict,
     refresh, loadProviders, newShot, selectShot, saveShot, archiveShot, moveShot, addCandidate, selectCandidate, createDraft, applyDraft, saveProvider, requestReasoning, settleCall };
 }

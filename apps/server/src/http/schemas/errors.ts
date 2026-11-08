@@ -19,6 +19,7 @@ const messages: Record<string, string> = {
   INVALID_TIMELINE: '时间线、字幕或音轨字段不合法',
   INVALID_STORYBOARD: '分镜数据包含无效、缺失或未允许的字段',
   INVALID_PROVIDER: '模型连接配置字段不合法',
+  INVALID_OPENAI_CONNECTION: 'OpenAI 连接名称、模型或版本字段不合法',
   INVALID_PLAN: '生成计划字段不合法',
   INVALID_KEY: 'API 密钥必须是文本',
   INVALID_CURRENCY: '请选择 USD 或 CNY',
