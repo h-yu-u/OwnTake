@@ -4,6 +4,8 @@
 
 > 配置体验补充：新增 [OpenAI 统一连接](../validation/openai-connection.md)，一次填写 API Key 管理推理、图片与配音，保留单协议兼容连接和原有执行流程。
 
+> 模型选择补充：支持 [账号模型发现](../validation/openai-model-discovery.md)、按用途搜索及手填回退，新连接的默认模型更新，已有选择与冻结任务保留。
+
 ## 目标
 
 根据真实制作中的重复操作提升效率。优先解决最常见的编辑、声音和审核问题，再决定是否把 Claude Code、Codex 等运行时接进来，不为了“多 Agent”增加固定流程。

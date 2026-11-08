@@ -32,3 +32,22 @@ export interface OpenAIConnectionSummary extends OpenAIConnection {
   hasKey: boolean;
   verification: 'unverified';
 }
+
+/** Discovery accepts a temporary key or uses a saved connection; it never saves either. */
+export interface OpenAIModelDiscoveryInput {
+  connectionId?: string;
+  key?: string;
+}
+
+/** /models supplies metadata, not a guarantee of endpoint support or successful generation. */
+export interface OpenAIListedModel {
+  id: string;
+  created: number;
+  ownedBy: string;
+  shutdownDate: string | null;
+}
+
+export interface OpenAIModelCatalog {
+  models: OpenAIListedModel[];
+  fetchedAt: string;
+}

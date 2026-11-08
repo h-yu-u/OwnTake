@@ -2,7 +2,7 @@
 
 ## 使用
 
-在「设置 → OpenAI → 添加 OpenAI」填写一次官方 API Key 并保存。连接名称和三类模型已有默认值，可在高级设置中调整。分镜推理、抽样画面审核、图片候选与配音请求会分别出现对应的 OpenAI 目标，无需再填写三次密钥。
+在「设置 → OpenAI → 添加 OpenAI」填写一次官方 API Key 并保存。连接名称和三类模型已有默认值，可在高级设置中调整，并读取账号模型列表或手动填写 ID，见 [模型发现说明](openai-model-discovery.md)。分镜推理、抽样画面审核、图片候选与配音请求会分别出现对应的 OpenAI 目标，无需再填写三次密钥。
 
 回到 OpenAI 卡片编辑时，Key 留空保留原值，填写新 Key 则统一更新三类能力。保存成功清空表单中的 Key；保存失败保留用户输入以便修正。保存只更新本地配置，界面不会将其显示为真实模型验证通过。
 
@@ -14,8 +14,8 @@
 
 | 能力 | 默认模型 | 当前协议与设置 |
 | --- | --- | --- |
-| 分镜 / 抽样画面审核 | `gpt-5.4-mini` | Chat Completions、严格 JSON Schema；推理输出上限 8192 tokens；审核最多 3 帧 |
-| 图片 | `gpt-image-2.5-flare` | Images 文生图、PNG；16:9、9:16、1:1；不发送旧 `response_format` 字段 |
+| 分镜 / 抽样画面审核 | `gpt-6.1-sol` | Chat Completions、严格 JSON Schema；总输出上限 8192 tokens（含推理 token）；审核最多 3 帧 |
+| 图片 | `gpt-image-2.6-flare` | Images 文生图、PNG；16:9、9:16、1:1；不发送旧 `response_format` 字段 |
 | 配音 | `gpt-4o-mini-tts` | Speech、WAV、官方声音列表、0.25–4 倍速、最多 4096 字符；支持独立语气指令 |
 
 三个目标默认请求超时均为 120 秒。高级模型覆盖需满足相应接口与能力要求；保存不探测模型权限。图片适配器使用 1536×864、864×1536、1024×1024 三种尺寸，替换图片模型时需确认其支持这些尺寸。配音切到不属于 `gpt-4o-mini-tts` 系列的模型时，不自动宣称其支持风格指令，声音使用较保守的列表。
@@ -48,7 +48,7 @@ OpenAI 已公布 `tts-1`、`tts-1-hd` 与 `gpt-4o-mini-tts` 系列将在 **2027-
 
 ## 验证
 
-2026-11-08，本地 Linux / Node.js 24.22.1 验证：
+统一连接首次交付时（2026-11-08）在本地 Linux / Node.js 24.22.1 验证；后续模型发现和新默认值的记录见 [模型发现说明](openai-model-discovery.md)：
 
 - `OWNTAKE_TEST_FONT=/tmp/owntake-fonts/NotoSansCJKsc-Regular.otf npm run check` 通过：三端类型检查、167 项测试、生产 Web 与桌面服务构建、独立目录服务冒烟均通过。
 - 新增的 9 项 OpenAI 仓储与 HTTP 测试覆盖共享凭据、轮换、三种已提交任务快照、版本冲突、SQL 中途失败回滚、重启、备份恢复、schema 5 升级、会话 / CSRF 和兼容连接。
@@ -61,7 +61,8 @@ OpenAI 已公布 `tts-1`、`tts-1-hd` 与 `gpt-4o-mini-tts` 系列将在 **2027-
 ## 官方依据
 
 - [API 身份认证](https://developers.openai.com/api/reference/overview)
-- [GPT-5.4 Mini 模型与结构化输出能力](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
+- [GPT-6.1 Sol 模型与结构化输出能力](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+- [GPT Image 2.6 参数与尺寸](https://developers.openai.com/api/docs/guides/image-prompting)
 - [Images 请求字段与尺寸](https://developers.openai.com/api/reference/resources/images/methods/generate)
 - [Speech 模型、声音与格式](https://developers.openai.com/api/docs/guides/text-to-speech)
 - [官方弃用计划](https://developers.openai.com/api/docs/deprecations)

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { NAlert, NButton, NCollapse, NCollapseItem, NForm, NFormItem, NInput, NModal, NSelect, NTag } from 'naive-ui';
+import { NAlert, NButton, NCollapse, NCollapseItem, NForm, NFormItem, NInput, NModal, NTag } from 'naive-ui';
 import type { OpenAIConnectionInput, OpenAIConnectionSummary, OpenAIModels } from '../types.ts';
 import type { OpenAIConnectionSave } from '../lib/openaiApi.ts';
-import { OPENAI_BASE_URL, OPENAI_DEFAULT_MODELS, OPENAI_MODEL_OPTIONS, OPENAI_SPEECH_SHUTDOWN_DATE } from '../../../../packages/providers/src/openai-presets.ts';
+import { OPENAI_BASE_URL, OPENAI_DEFAULT_MODELS, OPENAI_SPEECH_SHUTDOWN_DATE } from '../../../../packages/providers/src/openai-presets.ts';
+import OpenAIModelSelection from './OpenAIModelSelection.vue';
 
 const props = defineProps<{ show: boolean; connection: OpenAIConnectionSummary | null; disabled: boolean; saving: boolean; error: string }>();
 const emit = defineEmits<{ 'update:show': [value: boolean]; save: [value: OpenAIConnectionSave] }>();
@@ -11,22 +12,14 @@ const label = ref('OpenAI');
 const key = ref('');
 const models = ref<OpenAIModels>({ ...OPENAI_DEFAULT_MODELS });
 const expanded = ref<string[]>([]);
-const modelFields: { key: keyof OpenAIModels; label: string }[] = [
-  { key: 'reasoning', label: '分镜推理与抽帧审核模型' },
-  { key: 'image', label: '图片生成模型' },
-  { key: 'speech', label: '配音模型' },
-];
-const modelOptions = Object.fromEntries(modelFields.map(field => [
-  field.key, OPENAI_MODEL_OPTIONS[field.key].map(model => ({ label: model, value: model })),
-])) as Record<keyof OpenAIModels, { label: string; value: string }[]>;
 const valid = computed(() => Boolean(
   label.value.trim()
   && label.value.trim().length <= 100
-  && modelFields.every(field => models.value[field.key].trim().length > 0 && models.value[field.key].trim().length <= 200)
+  && Object.values(models.value).every(model => model.trim().length > 0 && model.trim().length <= 200)
   && (props.connection?.hasKey || key.value.trim()),
 ));
 
-watch(() => props.show, show => {
+watch(() => [props.show, props.connection?.id] as const, ([show]) => {
   key.value = '';
   if (!show) return;
   label.value = props.connection?.label ?? 'OpenAI';
@@ -35,9 +28,6 @@ watch(() => props.show, show => {
 }, { immediate: true });
 onBeforeUnmount(() => { key.value = ''; });
 
-function updateModel(field: keyof OpenAIModels, value: unknown): void {
-  if (typeof value === 'string') models.value = { ...models.value, [field]: value };
-}
 function close(value = false): void {
   if (!props.disabled && !props.saving) emit('update:show', value);
 }
@@ -72,10 +62,7 @@ function save(): void {
           <NFormItem label="连接名称">
             <NInput v-model:value="label" :maxlength="100" :disabled="disabled || saving" :input-props="{ 'aria-label': 'OpenAI 连接名称' }" />
           </NFormItem>
-          <NFormItem v-for="field in modelFields" :key="field.key" :label="field.label">
-            <NSelect :value="models[field.key]" :options="modelOptions[field.key]" filterable tag :disabled="disabled || saving" :aria-label="field.label" :input-props="{ 'aria-label': field.label }" placeholder="选择模型，或输入实际可用的模型 ID" @update:value="value => updateModel(field.key, value)" />
-          </NFormItem>
-          <p class="form-note">已预填对应能力的模型。可按账号权限调整；实际可用性以请求结果为准。</p>
+          <OpenAIModelSelection v-model="models" :connection="connection" :api-key="key" :show="show" :expanded="expanded.includes('models')" :disabled="disabled || saving" />
           <NAlert type="info" :show-icon="false" class="draft-alert">当前 OpenAI 配音模型计划于 {{ OPENAI_SPEECH_SHUTDOWN_DATE }} 停服，届时需要更新应用的配音接口。</NAlert>
           <p class="openai-endpoint"><span class="muted small">官方服务地址</span><code>{{ OPENAI_BASE_URL }}</code></p>
         </NCollapseItem>

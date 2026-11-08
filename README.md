@@ -77,6 +77,8 @@ OWNTAKE_DATA_DIR=/absolute/path/to/new-data npm run backup -- restore /absolute/
 
 使用官方 OpenAI API Key 时，在「设置 → OpenAI → 添加 OpenAI」中填写一次密钥并保存，即可在分镜推理、画面抽样审核、图片生成和配音中选择对应的 OpenAI 能力。默认模型与连接名称可在高级设置中调整；保存配置不会调用模型，也不代表账户权限已实测。
 
+展开「模型与高级设置」可读取或刷新此 Key 的账号模型，按用途搜索选择，也可手动填写模型 ID。未读取或读取失败时会提供多项官方预设；读取列表不会更改当前模型或保存临时 Key。新连接默认使用 `gpt-6.1-sol` 与 `gpt-image-2.6-flare`，已有连接保留原选择。模型目录只提供账号返回的名称和元数据，不等同于生成能力验证，详见 [模型发现说明](docs/validation/openai-model-discovery.md)。
+
 同一个 OpenAI 连接的三类能力共用一份凭据，更新密钥时一起更新；已提交的任务继续保留原模型和凭据引用。「协议兼容连接」继续支持单独配置 Chat Completions、OpenAI Images、Ark 视频和 Speech 兼容服务，现有连接可继续使用。
 
 当前官方配音使用 Speech API。OpenAI 已公布现有 TTS 系列于 **2027-01-06** 停服，后续需升级语音适配器，不能把 Realtime 模型 ID 直接填入 Speech 接口。配置方法、默认值与验证范围见 [OpenAI 统一连接说明](docs/validation/openai-connection.md)。
