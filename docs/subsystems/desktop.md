@@ -1,0 +1,23 @@
+# 桌面宿主
+
+## 进程边界
+
+Electron 主进程管理窗口、菜单、单实例和有限系统操作。preload 暴露固定的类型化桥；Vue 渲染器使用 sandbox、contextIsolation 与关闭的 nodeIntegration，不获得任意 Node/shell 权限。utilityProcess 承载与 Web 相同的本地核心。
+
+核心在随机回环端口监听后报告自身就绪。宿主校验精确来源，不扫描端口接管未知服务。单实例/数据目录锁防止对同一数据库启动两套调度器。
+
+## 生命周期
+
+关闭窗口隐藏并继续后台；明确退出才协调停止核心、保存状态和释放锁。恢复窗口不是重建业务服务。退出异常应保留可诊断状态，不能为了“快速退出”把正在完成的数据库提交直接截断。
+
+原生桥只提供应用信息、文件/工具选择、打开指定项目目录、定位已登记 Artifact 等有限行为；校验调用窗口主框架与 origin。用户选中路径不自动保存设置或发起模型调用。
+
+## 构建与分发
+
+[build-desktop](../../scripts/build-desktop.mjs) 产出主进程、preload 和服务 bundle。服务 ESM 中的 CommonJS 依赖用受控 createRequire 支持，不依赖用户机器的仓库 node_modules。应用需要的 FFmpeg、字体和模型凭据由用户另行配置。
+
+[发布流程](../operations/release.md) 在六种原生系统/架构上构建并检查真实归档。Electron 内部使用 `x64`，公开包名用 `amd64`。不同安装器的交互、系统信任签名与自动更新是独立验收条件，不从 archive smoke 推断已经通过。
+
+## 验证
+
+独立服务 bundle smoke 检查无仓库依赖的服务启动；真实 Electron smoke 检查渲染器隔离、原生桥、导入/导出、隐藏窗口后台运行、有序退出及重启恢复；归档 smoke 必须启动解包后的实际可执行文件并校验二进制架构。Linux CI 的显式 sandbox 测试例外不能变成产品默认设置。
