@@ -12,3 +12,6 @@ test-results/
 .DS_Store
 .owntake/
 *.sqlite*
+package-downloads/
+release-ready/
+checked-release/
