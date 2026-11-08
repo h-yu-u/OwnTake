@@ -33,7 +33,12 @@ export interface ProviderProfile {
   updatedAt: string;
 }
 /** This is a user-declared capability profile, not proof of supplier verification. */
-export interface ProviderSummary extends ProviderProfile { hasKey: boolean; verification: 'unverified' }
+export interface ProviderSummary extends ProviderProfile {
+  hasKey: boolean;
+  verification: 'unverified';
+  /** Present for profiles managed together by an OpenAI account connection. */
+  connectionId?: string;
+}
 export interface GenerationPlan {
   kind: 'image' | 'video';
   inputMode: ProviderInputMode;
