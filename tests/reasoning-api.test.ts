@@ -10,13 +10,14 @@ import type { CallRecord } from '../packages/contracts/src/calls.ts';
 import type { BoardSnapshot } from '../packages/contracts/src/storyboard.ts';
 const fields = { title: '晨光', purpose: '建立氛围', description: '窗边暖光', action: '缓慢推进', durationMs: 3000, caption: '清晨', mode: 'import', referenceArtifactIds: [] };
 test('reasoning API freezes one billed intent, applies only reviewed changes, and never resubmits unknown calls after restart', { timeout: 30000 }, async () => {
-  const root = await mkdtemp(join(tmpdir(), 'owntake-reasoning-')); let count = 0, drop = false;
+  const root = await mkdtemp(join(tmpdir(), 'owntake-reasoning-')); let count = 0, drop = false, reject = false;
   const fixture = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume the exact POST before simulating loss */ }
     count++;
     assert.equal(req.url, '/v1/chat/completions');
     assert.equal(req.headers.authorization, 'Bearer private-test-key');
     if (drop) { res.destroy(); return; }
+    if (reject) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { code: 'insufficient_quota', message: 'private-test-key and private brief' } })); return; }
     res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ operations: ['a','b','c','d'].map(id => ({ id, kind: 'add', fields: { ...fields, title: id } })) }) } }] }));
   });
   await new Promise<void>(r => fixture.listen(0, '127.0.0.1', r));
@@ -60,5 +61,46 @@ test('reasoning API freezes one billed intent, applies only reviewed changes, an
     await new Promise(r => setTimeout(r, 600)); assert.equal(count, 2, 'startup must not replay a possible paid POST');
     const settled = await api(`/api/calls/${uncertain.id}/settle`, 'POST', { actualAmount: 0.5, currency: 'USD', note: '人工核对测试账单记录' }); assert.equal(settled.actualAmount, 0.5);
     const publicData = JSON.stringify(await api(`/api/projects/${project.id}/calls`)); assert(!publicData.includes('private-test-key')); assert(!publicData.includes('credentialRef'));
+    drop = false; reject = true;
+    const rejectedRequest = { ...uncertainRequest, clientRequestId: 'quota-rejected', reservation: { ...request.reservation, amount: 0.1 } };
+    const rejected = await api(`/api/projects/${project.id}/reasoning`, 'POST', rejectedRequest, 202);
+    const failed = await terminal(rejected.id, project.id);
+    assert.equal(failed.status, 'failed'); assert.equal(failed.error?.code, 'PROVIDER_REJECTED');
+    assert.match(failed.error!.message, /HTTP 429.*insufficient_quota/); assert.match(failed.error!.message, /余额或额度不足/);
+    assert.equal(failed.actualAmount, null); assert.equal(failed.reservedAmount, 0.1);
+    assert.equal(app.store.getJob(rejected.jobId).error?.message, failed.error!.message);
+    assert.doesNotMatch(JSON.stringify(failed), /private-test-key|private brief/);
+    await app.close(); app = await startServer({ dataDir: join(root, 'app'), port: 0 }); await login();
+    const persisted = await api(`/api/projects/${project.id}/reasoning`, 'POST', rejectedRequest, 202);
+    assert.equal(persisted.id, failed.id); assert.deepEqual(persisted.error, failed.error);
+    assert.equal(count, 3, 'a rejected request must not be replayed after restart');
+    // New UI requests omit a local reservation; this must not imply a free call.
+    reject = false;
+    const { reservation: _reservation, ...unreserved } = { ...rejectedRequest, clientRequestId: 'without-reservation' };
+    const previousExposure = app.providers.exposure(project.id, 'USD');
+    await api(`/api/projects/${project.id}/reasoning`, 'POST', { ...unreserved, reservation: null }, 400);
+    await api(`/api/projects/${blank.id}/reasoning`, 'POST', { ...unreserved, expectedBoardRevision: 0 }, 400);
+    await api(`/api/projects/${project.id}/reasoning`, 'POST', { ...unreserved, expectedBoardRevision: board.revision + 1 }, 409);
+    assert.equal(count, 3);
+    const noBudget = await api(`/api/projects/${project.id}/reasoning`, 'POST', unreserved, 202);
+    const noBudgetResult = await terminal(noBudget.id, project.id);
+    assert.equal(noBudgetResult.status, 'succeeded'); assert.equal(noBudgetResult.budgetMode, 'none');
+    assert.equal(noBudgetResult.reservedAmount, 0); assert.equal(noBudgetResult.actualAmount, null);
+    assert.equal(app.providers.getCall(noBudget.id).reservation, null);
+    assert.equal(app.providers.exposure(project.id, 'USD'), previousExposure);
+    assert.equal((await api(`/api/projects/${project.id}/reasoning`, 'POST', unreserved, 202)).id, noBudget.id);
+    await api(`/api/projects/${project.id}/reasoning`, 'POST', { ...unreserved, reservation: request.reservation }, 409);
+    assert.equal(count, 4);
+    drop = true;
+    const noBudgetLost = { ...unreserved, clientRequestId: 'unreserved-lost' };
+    const lost = await api(`/api/projects/${project.id}/reasoning`, 'POST', noBudgetLost, 202);
+    assert.equal((await terminal(lost.id, project.id)).status, 'submission_unknown');
+    await app.close(); app = await startServer({ dataDir: join(root, 'app'), port: 0 }); await login();
+    const sameLost = await api(`/api/projects/${project.id}/reasoning`, 'POST', noBudgetLost, 202);
+    assert.equal(sameLost.id, lost.id); assert.equal(sameLost.status, 'submission_unknown');
+    assert.equal(sameLost.budgetMode, 'none'); assert.equal(sameLost.actualAmount, null);
+    assert.equal((await api(`/api/projects/${project.id}/reasoning`, 'POST', unreserved, 202)).id, noBudget.id);
+    await new Promise(r => setTimeout(r, 600)); assert.equal(count, 5);
+    assert.equal(app.providers.getCall(uncertain.id).reservedAmount, 1, 'legacy reservations are preserved');
   } finally { await app.close(); fixture.closeAllConnections(); await new Promise<void>(r => fixture.close(() => r())); await rm(root, { recursive: true, force: true }); }
 });

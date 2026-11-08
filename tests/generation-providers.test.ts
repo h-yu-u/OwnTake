@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import type { Artifact } from '../packages/contracts/src/index.ts';
 import type { GenerationPlan, ProviderProfile } from '../packages/contracts/src/providers.ts';
 import { ProviderCallError } from '../packages/providers/src/errors.ts';
+import { describeConnectionFailure } from '../packages/providers/src/http-error.ts';
 import { cancelGeneration, compileGenerationRequest, pollGeneration, submitGeneration, validateGeneration } from '../packages/providers/src/generation.ts';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6akAAAAASUVORK5CYII=', 'base64');
@@ -49,6 +50,18 @@ test('image requests preserve configured models and exact ratios without depreca
   assert.equal(validateGeneration({ ...profile('openai-images'), model: 'gpt-image-1' }, { ...imagePlan, ratio: '1:1' }, []).status, 'valid');
   assert.equal(validateGeneration({ ...profile('openai-images'), model: 'dall-e-3' }, { ...imagePlan, ratio: '1:1' }, []).status, 'needs_replan');
   assert.throws(() => compileGenerationRequest(profile('openai-images'), { ...imagePlan, inputMode: 'first_frame', referenceArtifactIds: ['ref_a'] }, { ref_a: pngUrl }), { code: 'GENERATION_NEEDS_REPLAN' });
+});
+
+test('image quality is explicit and preserved while legacy plans retain provider defaults', () => {
+  for (const quality of ['low', 'medium', 'high'] as const) {
+    const request = compileGenerationRequest(profile('openai-images'), { ...imagePlan, imageQuality: quality }, {});
+    assert.equal(request.body.quality, quality);
+  }
+  assert.equal(Object.hasOwn(compileGenerationRequest(profile('openai-images'), imagePlan, {}).body, 'quality'), false);
+  for (const imageQuality of [null, 'auto', '--tools', { toString: 'low' }, 1]) {
+    assert.throws(() => compileGenerationRequest(profile('openai-images'), { ...imagePlan, imageQuality } as GenerationPlan, {}), { code: 'INVALID_PLAN' });
+  }
+  assert.throws(() => compileGenerationRequest(profile('ark-video'), { ...videoPlan, imageQuality: 'low' }, {}), { code: 'INVALID_PLAN' });
 });
 
 test('Ark compilation preserves first/last order and explicit reference roles without emitting external URLs', () => {
@@ -159,6 +172,14 @@ test('timeout includes incomplete response bodies and connection loss after POST
     await assert.rejects(submitGeneration(profile('ark-video', url), '', videoPlan, {}), { classification: 'submission_unknown' });
   });
   assert.equal(posts, 1);
+});
+
+test('connection diagnostics retain only known network codes and redact messages, URLs and unknown codes', () => {
+  assert.match(describeConnectionFailure({ cause: { code: 'ECONNRESET', message: 'secret-key private-prompt' } }), /连接被重置.*ECONNRESET/);
+  assert.match(describeConnectionFailure({ cause: { code: 'CERT_HAS_EXPIRED' } }), /TLS 证书已过期/);
+  for (const error of [null, { message: 'secret-key' }, { code: 'private-prompt', cause: { code: 'secret-key' } }]) {
+    assert.doesNotMatch(describeConnectionFailure(error), /secret-key|private-prompt/);
+  }
 });
 
 test('poll failures retain query semantics and cannot trigger a new generation submission', async () => {

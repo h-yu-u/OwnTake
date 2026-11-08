@@ -39,6 +39,11 @@ export class StudioRunner {
   }
   tick():void{
     if(this.stopping||this.active)return;
+    const operations=this.repository.all();
+    for(const pending of operations.filter(o=>o.status==='queued'&&o.speechBatch)){
+      const blocked=operations.some(o=>o.projectId===pending.projectId&&o.speechBatch?.id===pending.speechBatch!.id&&o.speechBatch.index<pending.speechBatch!.index&&['failed','cancelled','submission_unknown','ingest_failed'].includes(o.status));
+      if(blocked){pending.status='cancelled';pending.actualAmount=0;pending.error={code:'BATCH_STOPPED',message:'前面的配音未完成，本镜头尚未调用。已停止本批次后续请求。'};this.persist(pending);}
+    }
     const o=this.repository.all().find(o=>o.status==='queued'||o.status==='received');if(!o)return;
     const controller=new AbortController(),promise=this.run(o,controller.signal).catch(()=>{console.error('[OwnTake] studio state persistence failed; inspect the saved operation');}).finally(()=>{this.active=undefined;});
     this.active={id:o.id,controller,promise};
@@ -73,7 +78,7 @@ export class StudioRunner {
         o.status='failed';o.actualAmount=0;o.error={code:'LOCAL_PREFLIGHT_FAILED',message:error instanceof AppError||error instanceof RuntimeCallError?error.message:'本机工具或输入检查失败，尚未发起模型调用。'};
       }else{
         const known=error instanceof ProviderCallError&&['http_rejected','invalid_response'].includes(error.classification)||error instanceof RuntimeCallError&&error.classification==='invalid_output';
-        o.status=known?'failed':'submission_unknown';o.error={code:known?'INVALID_EXTERNAL_RESULT':'SUBMISSION_UNKNOWN',message:known?'外部返回拒绝或无效结果，既有作品未改变；费用仍需核对。':'执行结果不明，外部服务可能已处理；不会自动再次提交或启动 CLI，预留继续保留。'};
+        o.status=known?'failed':'submission_unknown';o.error={code:known?'INVALID_EXTERNAL_RESULT':'SUBMISSION_UNKNOWN',message:error instanceof ProviderCallError&&error.classification==='http_rejected'?error.message:known?'外部返回拒绝或无效结果，既有作品未改变；费用仍需核对。':o.budgetMode==='none'?'执行结果不明，外部服务或 CLI 可能已处理；不会自动再次提交或启动 CLI，请核对原记录。':'执行结果不明，外部服务可能已处理；不会自动再次提交或启动 CLI，预留继续保留。'};
       }
       this.persist(o);
     }finally{if(work)await rm(work,{recursive:true,force:true}).catch(()=>undefined);}
@@ -98,7 +103,7 @@ export class StudioRunner {
       const root=await realpath(store.getProjectDir(o.projectId)),area=await checkedDirectory(root,'assets'),directory=await checkedDirectory(area,o.outputArtifactId),target=join(directory,'speech.wav');
       try{await link(source,target);}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;const info=await lstat(target);invariant(info.isFile()&&!info.isSymbolicLink()&&info.size===receipt.bytes.length&&await hashFile(target,signal)===receipt.sha256,'RESULT_CHANGED','已有配音结果与完整回复不同，原文件未覆盖',409);}
       const parent=await open(directory,'r');try{await parent.sync();}finally{await parent.close();}
-      store.transaction(()=>{store.addArtifact({id:o.outputArtifactId,projectId:o.projectId,name:`配音-${o.id.slice(0,8)}.wav`,kind:'audio',relativePath:`assets/${o.outputArtifactId}/speech.wav`,sha256:receipt.sha256,sizeBytes:receipt.bytes.length,media,source:'generated',metadata:{operationId:o.id,providerId:o.targetId,model:o.targetModel,voice:(o.input as SpeechInput).voice,aiGenerated:true}});o.artifactId=o.outputArtifactId;o.status='succeeded';o.error=null;this.persist(o);store.db.prepare('DELETE FROM studio_receipts WHERE operation_id=?').run(o.id);});
+      store.transaction(()=>{store.addArtifact({id:o.outputArtifactId,projectId:o.projectId,name:o.speechBatch?`配音-${String(o.speechBatch.index+1).padStart(2,'0')}-${o.speechBatch.shotTitle}.wav`:`配音-${o.id.slice(0,8)}.wav`,kind:'audio',relativePath:`assets/${o.outputArtifactId}/speech.wav`,sha256:receipt.sha256,sizeBytes:receipt.bytes.length,media,source:'generated',metadata:{operationId:o.id,...(o.speechBatch?{speechBatchId:o.speechBatch.id,shotId:o.source.shotId,shotRevision:o.speechBatch.shotRevision}:{}),providerId:o.targetId,model:o.targetModel,voice:(o.input as SpeechInput).voice,aiGenerated:true}});o.artifactId=o.outputArtifactId;o.status='succeeded';o.error=null;this.persist(o);store.db.prepare('DELETE FROM studio_receipts WHERE operation_id=?').run(o.id);});
     }else{
       invariant(receipt.mime==='application/json','RECEIPT_MISMATCH','接收结构化结果格式不一致',409);
       const result=JSON.parse(receipt.bytes.toString('utf8'));

@@ -6,7 +6,7 @@ import type { Shot } from '../../../packages/contracts/src/storyboard.ts';
 import type { ProviderProfile } from '../../../packages/contracts/src/providers.ts';
 import type { LocalRuntimeProfile } from '../../../packages/contracts/src/runtimes.ts';
 import type { Reservation } from '../../../packages/contracts/src/calls.ts';
-import type { StudioOperation, StudioInput, StudioKind } from '../../../packages/contracts/src/studio.ts';
+import type { StudioOperation, StudioInput, StudioKind, SpeechBatchSource } from '../../../packages/contracts/src/studio.ts';
 import { AppError, invariant } from '../../../packages/contracts/src/errors.ts';
 import { finiteNumber, integer, record, resourceId, text } from '../../../packages/domain/src/validation.ts';
 import { requestHash } from '../../../packages/storage/src/validation.ts';
@@ -15,14 +15,14 @@ import { ProviderRepository, reservationInput } from './provider-repository.ts';
 import type { RuntimeRepository } from './runtime-repository.ts';
 
 export interface StoredStudioOperation extends StudioOperation {
-  operationId: string; reservation: Reservation; outputArtifactId: string;
+  operationId: string; reservation: Reservation | null; batchRequestHash?: string; outputArtifactId: string;
   provider?: ProviderProfile; runtime?: LocalRuntimeProfile; credentialRef: string | null;
   frozen: { artifact?: Artifact; expected?: { purpose: string; description: string; action: string }; brief?: string; shots?: Shot[] };
   settlementNote?: string;
 }
 export function publicStudio(o: StoredStudioOperation): StudioOperation {
-  const { id, projectId, kind, status, jobId, targetId, targetLabel, targetModel, input, source, currency, reservedAmount, actualAmount, artifactId, draftId, review, error, createdAt, updatedAt } = o;
-  return { id, projectId, kind, status, jobId, targetId, targetLabel, targetModel, input, source, currency, reservedAmount, actualAmount, artifactId, draftId, review, error, createdAt, updatedAt };
+  const { id, projectId, kind, status, jobId, targetId, targetLabel, targetModel, input, source, currency, reservedAmount, actualAmount, artifactId, draftId, review, error, createdAt, updatedAt, speechBatch, budgetMode } = o;
+  return { id, projectId, kind, status, jobId, targetId, targetLabel, targetModel, input, source, currency, reservedAmount, actualAmount, artifactId, draftId, review, error, createdAt, updatedAt, ...(speechBatch ? { speechBatch } : {}), ...(budgetMode ? { budgetMode } : {}) };
 }
 export class StudioRepository {
   readonly store: Store; readonly board: StoryboardStore; readonly providers: ProviderRepository; readonly runtimes: RuntimeRepository;
@@ -47,15 +47,15 @@ export class StudioRepository {
     const bytes=Buffer.from(row.data as Uint8Array); invariant(createHash('sha256').update(bytes).digest('hex')===row.sha256,'RECEIPT_CHANGED','保存的完整回复摘要不一致',409);
     return {bytes,sha256:String(row.sha256),mime:String(row.mime)};
   }
-  create(projectId: string,value: unknown): StoredStudioOperation {
+  create(projectId: string,value: unknown, batch?: { source: SpeechBatchSource; shotId: string; requestHash: string }): StoredStudioOperation {
     const b=record(value); invariant(Object.keys(b).every(k=>['kind','targetId','expectedTargetUpdatedAt','clientRequestId','reservation','input'].includes(k)),'INVALID_INPUT','创作请求包含不支持的字段');
     invariant(['tts','frame_review','runtime_draft'].includes(String(b.kind)),'INVALID_INPUT','创作工具类型无效');
-    const kind=b.kind as StudioKind,targetId=resourceId(b.targetId),operationId=resourceId(b.clientRequestId),targetRevision=text(b.expectedTargetUpdatedAt,'连接版本',100),reservation=reservationInput(b.reservation),raw=record(b.input);
-    const hash=requestHash({kind,targetId,targetRevision,reservation,input:raw});
+    const kind=b.kind as StudioKind,targetId=resourceId(b.targetId),operationId=resourceId(b.clientRequestId),targetRevision=text(b.expectedTargetUpdatedAt,'连接版本',100),reservation=b.reservation === undefined ? null : reservationInput(b.reservation),raw=record(b.input);
+    const hash=requestHash({kind,targetId,targetRevision,reservation,input:raw,...(batch ? {batch} : {})});
     return this.store.transaction(()=>{
       const duplicate=this.store.db.prepare('SELECT request_hash,body_json FROM studio_operations WHERE project_id=? AND operation_id=?').get(projectId,operationId);
       if(duplicate){invariant(duplicate.request_hash===hash,'IDEMPOTENCY_CONFLICT','同一操作标识不能用于不同输入',409);return JSON.parse(String(duplicate.body_json));}
-      const project=this.store.getProject(projectId),source:StudioOperation['source']={},frozen:StoredStudioOperation['frozen']={};
+      const project=this.store.getProject(projectId),source:StudioOperation['source']=batch ? {shotId:batch.shotId} : {},frozen:StoredStudioOperation['frozen']={};
       let provider:ProviderProfile|undefined,runtime:LocalRuntimeProfile|undefined,credentialRef:string|null=null,input:StudioInput;
       if(kind==='runtime_draft'){
         invariant(Object.keys(raw).every(k=>['expectedBoardRevision','expectedProjectRevision'].includes(k)),'INVALID_INPUT','运行时只接收已冻结的项目与分镜快照');
@@ -83,11 +83,11 @@ export class StudioRepository {
           frozen.artifact=artifact;frozen.expected={purpose:history.purpose,description:history.description,action:history.action};input={candidateId:candidate.id};
         }
       }
-      invariant(this.providers.exposure(projectId,reservation.currency)+reservation.amount<=reservation.projectLimit+0.0000001,'BUDGET_EXCEEDED','该币种的已确认费用与未核对预留超过项目额度',409);
+      if(reservation) invariant(this.providers.exposure(projectId,reservation.currency)+reservation.amount<=reservation.projectLimit+0.0000001,'BUDGET_EXCEEDED','该币种的已确认费用与未核对预留超过项目额度',409);
       const target=provider??runtime!,id=randomUUID(),now=new Date().toISOString(),job=this.store.createJob({projectId,type:'studio',payload:{operationId:id},dedupeKey:`studio:${projectId}:${operationId}`});
-      const o:StoredStudioOperation={id,projectId,kind,status:'queued',jobId:job.id,targetId,targetLabel:target.label,targetModel:target.model,input,source,currency:reservation.currency,reservedAmount:reservation.amount,actualAmount:null,artifactId:null,draftId:null,review:null,error:null,createdAt:now,updatedAt:now,operationId,reservation,outputArtifactId:randomUUID(),provider,runtime,credentialRef,frozen};
+      const o:StoredStudioOperation={id,projectId,kind,status:'queued',jobId:job.id,targetId,targetLabel:target.label,targetModel:target.model,input,source,currency:reservation?.currency ?? 'USD',reservedAmount:reservation?.amount ?? 0,...(!reservation ? {budgetMode:'none' as const} : {}),...(batch ? {speechBatch:batch.source,batchRequestHash:batch.requestHash} : {}),actualAmount:null,artifactId:null,draftId:null,review:null,error:null,createdAt:now,updatedAt:now,operationId,reservation,outputArtifactId:randomUUID(),provider,runtime,credentialRef,frozen};
       this.store.db.prepare('INSERT INTO studio_operations(id,project_id,operation_id,request_hash,status,body_json) VALUES(?,?,?,?,?,?)').run(id,projectId,operationId,hash,o.status,JSON.stringify(o));
-      this.store.appendEvent(projectId,'studio.created',{operationId:id,kind,reservedAmount:reservation.amount,currency:reservation.currency});return o;
+      this.store.appendEvent(projectId,'studio.created',{operationId:id,kind,reservedAmount:reservation?.amount ?? 0,currency:reservation?.currency ?? 'USD'});return o;
     });
   }
   settle(id:string,value:unknown):StudioOperation{

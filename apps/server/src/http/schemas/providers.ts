@@ -41,5 +41,5 @@ export const ReasoningInput = Type.Object({
   expectedBoardRevision: Revision,
   expectedProjectRevision: ExistingRevision,
   expectedProviderUpdatedAt: Type.String({ maxLength: 100 }),
-  reservation: Reservation,
+  reservation: Type.Optional(Reservation),
 }, { additionalProperties: true });

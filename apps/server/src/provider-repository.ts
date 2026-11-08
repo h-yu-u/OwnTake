@@ -12,11 +12,11 @@ import { CredentialVault } from './credentials.ts';
 export interface StoredCall extends CallRecord {
   operationId: string; provider: ProviderProfile; credentialRef: string | null;
   input: { brief: string; shots: Shot[]; boardRevision: number; projectRevision: number };
-  reservation: Reservation; settlementNote?: string;
+  reservation: Reservation | null; settlementNote?: string;
 }
 export function publicCall(call: StoredCall): CallRecord {
-  const { id, projectId, providerId, jobId, status, currency, reservedAmount, actualAmount, draftId, error, createdAt, updatedAt } = call;
-  return { id, projectId, providerId, jobId, status, currency, reservedAmount, actualAmount, draftId, error, createdAt, updatedAt };
+  const { id, projectId, providerId, jobId, status, currency, reservedAmount, actualAmount, draftId, error, createdAt, updatedAt, budgetMode } = call;
+  return { id, projectId, providerId, jobId, status, currency, reservedAmount, actualAmount, draftId, error, createdAt, updatedAt, ...(budgetMode ? { budgetMode } : {}) };
 }
 function reservationInput(value: unknown): Reservation {
   const v = record(value); invariant(v.currency === 'USD' || v.currency === 'CNY', 'INVALID_CURRENCY', '请选择 USD 或 CNY');
@@ -85,7 +85,7 @@ export class ProviderRepository {
   }
   createReasoning(projectId: string, value: unknown): StoredCall {
     const b = record(value), providerId = resourceId(b.providerId), operationId = resourceId(b.clientRequestId);
-    const expected = integer(b.expectedBoardRevision, '分镜版本', 0, Number.MAX_SAFE_INTEGER), expectedProject = integer(b.expectedProjectRevision, '项目简报版本', 1, Number.MAX_SAFE_INTEGER), reservation = reservationInput(b.reservation);
+    const expected = integer(b.expectedBoardRevision, '分镜版本', 0, Number.MAX_SAFE_INTEGER), expectedProject = integer(b.expectedProjectRevision, '项目简报版本', 1, Number.MAX_SAFE_INTEGER), reservation = b.reservation === undefined ? null : reservationInput(b.reservation);
     const expectedProviderUpdatedAt = text(b.expectedProviderUpdatedAt, '模型连接版本', 100);
     const hash = requestHash({ providerId, expected, expectedProject, expectedProviderUpdatedAt, reservation });
     return this.store.transaction(() => {
@@ -100,15 +100,15 @@ export class ProviderRepository {
       invariant(project.brief.trim().length > 0, 'BRIEF_REQUIRED', '请先填写创作简报');
       invariant(profile.capabilities.inputModes.includes('text'), 'PROVIDER_CAPABILITY', '推理连接需要文本能力');
       invariant(Buffer.byteLength(JSON.stringify({ brief: project.brief, shots: snapshot.shots.filter(s => !s.archived) }), 'utf8') <= 256 * 1024, 'CONTEXT_TOO_LARGE', '本次分镜上下文超过 256 KiB，请缩短描述后再调用');
-      invariant(this.exposure(projectId, reservation.currency) + reservation.amount <= reservation.projectLimit + 0.0000001, 'BUDGET_EXCEEDED', '当前币种的已确认费用与未核对预留已达到项目额度', 409);
+      if (reservation) invariant(this.exposure(projectId, reservation.currency) + reservation.amount <= reservation.projectLimit + 0.0000001, 'BUDGET_EXCEEDED', '当前币种的已确认费用与未核对预留已达到项目额度', 409);
       // Credential validation occurs before a reservation is committed or dispatch starts.
       const key = this.vault.get(credentialRef), hostname = new URL(profile.baseUrl).hostname;
       invariant(key.length > 0 || ['localhost', '127.0.0.1', '[::1]'].includes(hostname), 'CREDENTIAL_REQUIRED', '请先为远端模型连接填写 API 密钥');
       const id = randomUUID(), now = new Date().toISOString();
       const job = this.store.createJob({ projectId, type: 'reasoning', payload: { callId: id }, dedupeKey: `reasoning:${projectId}:${operationId}` });
-      const call: StoredCall = { id, projectId, providerId, jobId: job.id, operationId, provider: profile, credentialRef, status: 'queued', currency: reservation.currency, reservedAmount: reservation.amount, actualAmount: null, draftId: null, error: null, createdAt: now, updatedAt: now, input: { brief: project.brief, shots: snapshot.shots.filter(s => !s.archived), boardRevision: snapshot.revision, projectRevision: project.revision }, reservation };
+      const call: StoredCall = { id, projectId, providerId, jobId: job.id, operationId, provider: profile, credentialRef, status: 'queued', currency: reservation?.currency ?? 'USD', reservedAmount: reservation?.amount ?? 0, ...(!reservation ? { budgetMode: 'none' as const } : {}), actualAmount: null, draftId: null, error: null, createdAt: now, updatedAt: now, input: { brief: project.brief, shots: snapshot.shots.filter(s => !s.archived), boardRevision: snapshot.revision, projectRevision: project.revision }, reservation };
       this.store.db.prepare('INSERT INTO provider_calls(id,project_id,operation_id,request_hash,status,body_json,credential_ref) VALUES(?,?,?,?,?,?,?)').run(id, projectId, operationId, hash, call.status, JSON.stringify(call), credentialRef);
-      this.store.appendEvent(projectId, 'call.created', { callId: id, reservedAmount: reservation.amount, currency: reservation.currency }); return call;
+      this.store.appendEvent(projectId, 'call.created', { callId: id, reservedAmount: call.reservedAmount, currency: call.currency }); return call;
     });
   }
   settle(id: string, value: unknown): CallRecord {

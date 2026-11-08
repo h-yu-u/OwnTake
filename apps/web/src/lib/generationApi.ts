@@ -3,7 +3,7 @@ import { request } from './api.ts';
 
 export interface GenerationRequest {
   providerId: string; plan: GenerationPlan; expectedShotRevision: number; expectedProviderUpdatedAt: string;
-  clientRequestId: string; reservation: Reservation;
+  clientRequestId: string; reservation?: Reservation;
 }
 export interface HumanReviewInput {
   candidateId: string; verdict: 'pass' | 'needs_review' | 'reject';

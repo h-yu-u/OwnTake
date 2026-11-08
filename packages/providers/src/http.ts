@@ -1,6 +1,7 @@
 import { invariant } from '../../contracts/src/errors.ts';
 import type { ProviderProfile } from '../../contracts/src/providers.ts';
 import { ProviderCallError, invalidResponse } from './errors.ts';
+import { providerHttpError } from './http-error.ts';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
@@ -26,9 +27,7 @@ export async function postJsonOnce(profile: ProviderProfile, key: string, endpoi
       body: encoded,
     });
     if (!response.ok) {
-      controller.abort();
-      if (response.status >= 500 || response.status === 408) throw new ProviderCallError('submission_unknown', 'PROVIDER_SUBMISSION_UNKNOWN', `模型服务返回 HTTP ${response.status}，无法据此确认未处理请求；请核对，不会自动重发。`, 502, response.status);
-      throw new ProviderCallError('http_rejected', 'PROVIDER_HTTP_REJECTED', `模型服务返回 HTTP ${response.status}；不会自动重试。`, 502, response.status);
+      throw await providerHttpError(response, controller);
     }
     const declared = Number(response.headers.get('content-length'));
     if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) { controller.abort(); throw invalidResponse('PROVIDER_RESPONSE_TOO_LARGE'); }

@@ -46,7 +46,7 @@ before(async () => {
   await ffmpeg(['-f', 'lavfi', '-i', 'color=c=black:s=320x180:r=24', '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=48000', '-t', '4', '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '1', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '2', black]);
   await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '5', '-c:a', 'pcm_s16le', '-ac', '2', voice]);
   await register('black', black); await register('voice', voice);
-  for (const candidate of [process.env.OWNTAKE_TEST_FONT, '/tmp/owntake-fonts/NotoSansCJKsc-Regular.otf', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf', '/System/Library/Fonts/PingFang.ttc']) {
+  for (const candidate of [process.env.OWNTAKE_TEST_FONT, '/tmp/owntake-fonts/NotoSansCJKsc-Regular.otf', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf', '/System/Library/Fonts/PingFang.ttc', '/System/Library/Fonts/Hiragino Sans GB.ttc', '/System/Library/Fonts/STHeiti Medium.ttc']) {
     if (!candidate) continue;
     try { await access(candidate); font = candidate; break; } catch { /* Try the next explicitly known font location. */ }
   }
@@ -137,4 +137,27 @@ test('offline thumbnail extraction produces a real bounded PNG and protects exis
   assert.deepEqual(await readFile(target), saved);
   await assert.rejects(extractThumbnail(files.get('black')!.path, join(directory, 'bad.png'), { atMs: 5000 }), { code: 'INVALID_THUMBNAIL' });
   await assert.rejects(extractThumbnail(files.get('voice')!.path, join(directory, 'audio.png')), { code: 'INVALID_THUMBNAIL' });
+});
+
+test('26 independently generated speech segments export with audible first and last shots', async () => {
+  const { placeBatchSpeech } = await import('../packages/domain/src/batch-speech.ts');
+  const voicePath = join(directory, 'short-narration.wav'), imagePath = join(directory, 'still.png');
+  await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=660:sample_rate=48000', '-t', '0.12', '-c:a', 'pcm_s16le', voicePath]);
+  await ffmpeg(['-i', files.get('black')!.path, '-frames:v', '1', '-threads', '1', imagePath]);
+  await register('still', imagePath); await register('short-voice', voicePath);
+  const { artifact: source, path } = files.get('short-voice')!;
+  const scenes = Array.from({ length: 26 }, (_, index) => ({ id: `scene-${index}`, projectId: 'project', title: `镜头 ${index + 1}`, purpose: '', description: '', action: '', durationMs: 100, caption: '', mode: 'import' as const, referenceArtifactIds: [], order: index, revision: 1, visualRevision: 1, captionRevision: 1, editRevision: 1, archived: false, selectedArtifactId: 'still', selectedVisualRevision: 1, createdAt: '', updatedAt: '' }));
+  const operations = scenes.map((scene, index) => {
+    const id = `narration-${index}`;
+    files.set(id, { artifact: { ...source, id }, path });
+    return { id, projectId: 'project', kind: 'tts' as const, status: 'succeeded' as const, jobId: `job-${index}`, targetId: 'fixture', targetLabel: 'fixture', targetModel: 'fixture', input: { text: 'fixture', voice: 'fixture', speed: 1, instructions: null }, source: { shotId: scene.id }, speechBatch: { id: 'narration-batch', index, total: 26, shotTitle: scene.title, shotRevision: 1 }, currency: 'USD' as const, reservedAmount: 0, actualAmount: null, artifactId: id, draftId: null, review: null, error: null, createdAt: '', updatedAt: '' };
+  });
+  const initial = { ...timeline(), clips: scenes.map(scene => ({ artifactId: 'still', sourceInMs: 0, durationMs: 100, fit: 'contain' as const, muteSource: true, shotId: scene.id })) };
+  const placed = placeBatchSpeech(initial, operations, [...files.values()].map(item => item.artifact), scenes);
+  assert.equal(placed.draft.audio.length, 26); assert.equal(placed.extendedShots, 26);
+  validateStoredTimeline(placed.draft, id => files.get(id)!.artifact);
+  const media = await render(placed.draft, '26-narrations.mp4');
+  assert(Math.abs(media.durationMs - 3250) <= 50); assert.equal(media.hasAudio, true);
+  const samples = await pcm(join(directory, '26-narrations.mp4'));
+  for (let index = 0; index < 26; index++) assert(amplitude(samples, 660, index * 0.125 + 0.02, 0.05) > 0.04, `speech ${index + 1} must be audible at its own shot start`);
 });

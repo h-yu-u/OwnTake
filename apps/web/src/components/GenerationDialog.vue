@@ -42,9 +42,13 @@ watch(() => props.shot.revision, resetReview);
 watch(() => JSON.stringify(reservation.value), () => { acknowledged.value = false; operationId.value = crypto.randomUUID(); });
 function changeKind(kind: 'image' | 'video') {
   const next = { ...plan.value, kind };
-  if (kind === 'video') next.durationSec = props.shot.durationMs / 1000;
-  else delete next.durationSec;
+  if (kind === 'video') { next.durationSec = props.shot.durationMs / 1000; delete next.imageQuality; }
+  else { delete next.durationSec; next.imageQuality = 'low'; }
   plan.value = next; providerId.value = props.providers.find(item => item.kind === (kind === 'image' ? 'openai-images' : 'ark-video'))?.id || null;
+}
+function changeImageQuality(value: string) {
+  if (value === 'low' || value === 'medium' || value === 'high') plan.value.imageQuality = value;
+  else delete plan.value.imageQuality;
 }
 function moveReference(index: number, direction: -1 | 1) {
   const references = [...plan.value.referenceArtifactIds]; const target = index + direction;
@@ -79,6 +83,8 @@ function submit() {
       <div v-if="provider" class="reasoning-target"><div class="heading-line"><strong>{{ provider.model }}</strong><NTag type="warning" size="small" :bordered="false">用户声明能力 · 尚未实接验证</NTag></div><code>{{ provider.baseUrl }}</code><p>{{ provider.timeoutMs / 1000 }} 秒单次 HTTP 超时。实际远端任务进度由本地服务持续跟踪。</p></div>
       <NFormItem label="本次生成提示词"><NInput v-model:value="plan.prompt" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" :disabled="disabled || validating" placeholder="描述希望出现的画面和动作。" /></NFormItem>
       <div class="generation-plan-fields"><NFormItem label="输入方式"><NSelect v-model:value="plan.inputMode" :options="inputModeOptions" :disabled="disabled || validating" /></NFormItem><NFormItem label="画幅"><NSelect v-model:value="plan.ratio" :options="ratioOptions" :disabled="disabled || validating" /></NFormItem><NFormItem v-if="plan.kind === 'video'" label="目标时长（秒）"><NInputNumber v-model:value="plan.durationSec" :min="0.1" :max="600" :precision="3" :disabled="disabled || validating" /></NFormItem></div>
+      <NFormItem v-if="plan.kind === 'image'" label="图片质量"><NSelect :value="plan.imageQuality || 'default'" :options="[{ label: '低 · 预览', value: 'low' }, { label: '中 · 标准', value: 'medium' }, { label: '高 · 精细', value: 'high' }, { label: '模型默认', value: 'default' }]" aria-label="图片质量" :disabled="disabled || validating" @update:value="changeImageQuality" /></NFormItem>
+      <p v-if="plan.kind === 'image'" class="form-note">质量会随本次计划保存并发送给模型；更高质量可能增加耗时和费用。预留金额不是供应商的计费上限。</p>
       <p v-if="plan.kind === 'video' && provider" class="form-note">该连接声明支持：{{ provider.capabilities.durationsSec.join('、') || '尚未填写' }} 秒；不匹配的时长会被阻止。</p>
       <NFormItem label="将发送的参考图片（按下面顺序）"><NSelect v-model:value="plan.referenceArtifactIds" multiple filterable :options="referenceOptions" :disabled="disabled || validating" placeholder="纯文字方式无需图片；首尾帧必须保持两张图片的顺序" /></NFormItem>
       <NAlert v-if="plan.inputMode === 'text' && plan.referenceArtifactIds.length" type="warning" :show-icon="false" class="draft-alert">当前选择了纯文字输入，但仍保留引用。系统不会静默丢弃它们。<NButton text type="primary" :disabled="disabled || validating" @click="plan.referenceArtifactIds = []">确认清空引用，使用纯文字</NButton></NAlert>

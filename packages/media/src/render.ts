@@ -10,6 +10,7 @@ import { compileAudioMix } from './audio.ts';
 import type { PreparedAudio } from './audio.ts';
 import { compileCaptions } from './captions.ts';
 import { stageSubtitleFont } from './fonts.ts';
+import { resolveRenderFfmpeg } from './capabilities.ts';
 
 export interface ResolvedArtifact { artifact: Artifact; path: string }
 export interface RenderOptions {
@@ -75,7 +76,7 @@ export async function renderTimeline(options: RenderOptions): Promise<MediaInfo>
   validateTimeline(timeline);
   throwIfAborted(options.signal);
   const expectedDurationMs = timelineDurationMs(timeline);
-  const ffmpegPath = options.ffmpegPath ?? 'ffmpeg';
+  const ffmpegPath = await resolveRenderFfmpeg(options.ffmpegPath ?? 'ffmpeg', timeline.captions.length > 0, { signal: options.signal });
   const outputPath = resolve(options.outputPath);
   const prepared: PreparedClip[] = [];
   const preparedAudio: PreparedAudio[] = [];

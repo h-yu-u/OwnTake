@@ -1,3 +1,4 @@
+import { MAX_AUDIO_TRACKS } from '../../../../packages/contracts/src/index.ts';
 import type { Artifact, Ratio, Timeline, TimelineClip, TimelineDraft } from '../types.ts';
 
 export function emptyTimeline(ratio: Ratio): TimelineDraft {
@@ -46,7 +47,7 @@ export function timelineProblems(draft: TimelineDraft, artifacts: Artifact[]): s
     if (caption.style?.color && !/^#[0-9a-fA-F]{6}$/.test(caption.style.color)) issues.push(`字幕 ${index + 1} 的颜色须使用 #RRGGBB 格式。`);
     if (caption.style?.fontFamily && /[,{}\x00-\x1f\x7f]/.test(caption.style.fontFamily)) issues.push(`字幕 ${index + 1} 的字体族名称包含不支持的字符。`);
   }
-  if (draft.audio.length > 16) issues.push('独立音轨最多支持 16 条。');
+  if (draft.audio.length > MAX_AUDIO_TRACKS) issues.push(`独立音轨最多支持 ${MAX_AUDIO_TRACKS} 条。`);
   for (const [index, track] of draft.audio.entries()) {
     const artifact = byId.get(track.artifactId);
     if (!artifact || artifact.kind !== 'audio') { issues.push(`音轨 ${index + 1} 需要可用的音频素材。`); continue; }

@@ -39,7 +39,8 @@ async function harness(t: TestContext) {
   let supplierOrigin = '';
   let png = Buffer.alloc(0), video = Buffer.alloc(0);
   const state = {
-    imagePosts: 0, videoPosts: 0, reasoningPosts: 0, dropNextVideo: false,
+    imagePosts: 0, videoPosts: 0, reasoningPosts: 0, dropNextVideo: false, nextImageError: 0,
+    imageQualities: [] as unknown[],
     nextVideoDownloadFailures: 0,
     nextVideoHtmlFailures: 0,
     tasks: new Map<string, RemoteTask>(),
@@ -51,7 +52,11 @@ async function harness(t: TestContext) {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
       state.requests.push({ method: request.method ?? '', path, authorization: request.headers.authorization });
       if (request.method === 'POST' && path === '/v1/images/generations') {
-        await bodyOf(request); state.imagePosts += 1;
+        const body = await bodyOf(request); state.imageQualities.push(body.quality); state.imagePosts += 1;
+        if (state.nextImageError) {
+          const status = state.nextImageError; state.nextImageError = 0;
+          reply(response, { error: { code: 'insufficient_quota', message: 'private-generation-fixture-key and private prompt' } }, status); return;
+        }
         reply(response, { data: [{ b64_json: png.toString('base64') }] }); return;
       }
       if (request.method === 'POST' && path === '/v1/chat/completions') {
@@ -170,6 +175,48 @@ async function harness(t: TestContext) {
   return { get app() { return app!; }, state, api, request, restart, createProject, createShot, provider, generation, until, intent };
 }
 
+test('unbudgeted generation preserves unknown costs and deduplication without changing legacy budget checks', async t => {
+  const h = await harness(t), project = await h.createProject(), first = await h.createShot(project.id, 'generate_image'), second = await h.createShot(project.id, 'import'), connection = await h.provider('openai-images');
+  const legacy = await h.api<GenerationRecord>(`/api/shots/${first.id}/generations`, 'POST', h.intent(first, connection, imagePlan, 'manual-budget', 0.5, 0.5), 202);
+  await h.until(project.id, legacy.id, record => record.status === 'succeeded');
+  const { reservation: ignored, ...simple } = h.intent(second, connection, { ...imagePlan, imageQuality: 'low' }, 'without-local-budget');
+  const incompatible = await h.request(`/api/shots/${second.id}/generations`, 'POST', { ...simple, plan: { ...imagePlan, ratio: '9:16' }, clientRequestId: 'bad-plan' });
+  assert.equal(incompatible.status, 409); assert.equal(h.state.imagePosts, 1);
+  const malformed = await h.request(`/api/shots/${second.id}/generations`, 'POST', { ...simple, reservation: null });
+  assert.equal(malformed.status, 400);
+  const accepted = await h.api<GenerationRecord>(`/api/shots/${second.id}/generations`, 'POST', simple, 202);
+  const completed = await h.until(project.id, accepted.id, record => record.status === 'succeeded');
+  assert.equal(completed.budgetMode, 'none'); assert.equal(completed.reservedAmount, 0); assert.equal(completed.actualAmount, null);
+  assert.equal(h.app.generations.get(accepted.id).reservation, null);
+  assert.equal(h.app.providers.exposure(project.id, 'USD'), 0.5);
+  await h.restart();
+  const same = await h.api<GenerationRecord>(`/api/shots/${second.id}/generations`, 'POST', simple, 202);
+  assert.equal(same.id, accepted.id); assert.equal(same.budgetMode, 'none'); assert.equal(same.actualAmount, null); assert.equal(h.state.imagePosts, 2);
+  const manualAgain = await h.request(`/api/shots/${second.id}/generations`, 'POST', h.intent(second, connection, imagePlan, 'manual-still-limited', 0.5, 0.5));
+  assert.equal(manualAgain.status, 409); assert.equal(h.state.imagePosts, 2);
+  assert.equal((await h.generation(project.id, legacy.id)).reservedAmount, 0.5);
+});
+
+test('generation diagnostics persist HTTP failures without leaking provider text, releasing reservations or replaying images', async t => {
+  const h = await harness(t), project = await h.createProject(), shot = await h.createShot(project.id, 'generate_image'), connection = await h.provider('openai-images');
+  for (const status of [503, 429]) {
+    h.state.nextImageError = status;
+    const request = h.intent(shot, connection, imagePlan, `image-http-${status}`);
+    const accepted = await h.api<GenerationRecord>(`/api/shots/${shot.id}/generations`, 'POST', request, 202);
+    const failed = await h.until(project.id, accepted.id, record => ['failed', 'submission_unknown'].includes(record.status));
+    assert.equal(failed.status, status === 503 ? 'submission_unknown' : 'failed');
+    assert.match(failed.error!.message, new RegExp(`HTTP ${status}`));
+    if (status === 429) assert.match(failed.error!.message, /insufficient_quota/);
+    assert.equal(failed.actualAmount, null); assert.equal(failed.reservedAmount, 0.5);
+    assert.equal(h.app.store.getJob(failed.jobId).error?.message, failed.error!.message);
+    assert.doesNotMatch(JSON.stringify(failed), /private-generation-fixture-key|private prompt/);
+    const count = h.state.imagePosts;
+    await h.restart();
+    const same = await h.api<GenerationRecord>(`/api/shots/${shot.id}/generations`, 'POST', request, 202);
+    assert.equal(same.id, failed.id); assert.deepEqual(same.error, failed.error); assert.equal(h.state.imagePosts, count);
+  }
+});
+
 test('generation API publishes an image candidate and preserves a pending video across restart and visual revision changes', { timeout: 60000 }, async t => {
   const h = await harness(t), project = await h.createProject();
   assert.equal(h.app.store.schemaVersion, SCHEMA_VERSION);
@@ -177,12 +224,13 @@ test('generation API publishes an image candidate and preserves a pending video 
   assert.equal(imageProvider.hasKey, true);
   const validation = await h.api<PlanValidationResult>(`/api/shots/${imageShot.id}/generations/validate`, 'POST', { providerId: imageProvider.id, plan: imagePlan });
   assert.equal(validation.status, 'valid');
-  const imageRequest = h.intent(imageShot, imageProvider, imagePlan, 'image-once');
+  const imageRequest = h.intent(imageShot, imageProvider, { ...imagePlan, imageQuality: 'low' }, 'image-once');
   const accepted = await h.api<GenerationRecord>(`/api/shots/${imageShot.id}/generations`, 'POST', imageRequest, 202);
   const image = await h.until(project.id, accepted.id, record => ['succeeded', 'failed'].includes(record.status));
   assert.equal(image.status, 'succeeded', JSON.stringify(image.error));
   assert.equal(image.actualAmount, null);
   assert.equal(h.state.imagePosts, 1);
+  assert.equal(h.state.imageQualities[0], 'low'); assert.equal(image.plan.imageQuality, 'low');
   const duplicate = await h.api<GenerationRecord>(`/api/shots/${imageShot.id}/generations`, 'POST', imageRequest, 202);
   assert.equal(duplicate.id, image.id);
   const imageBoard = await h.api<BoardSnapshot>(`/api/projects/${project.id}/storyboard`);
@@ -207,6 +255,7 @@ test('generation API publishes an image candidate and preserves a pending video 
   assert.equal(paused.pollingPaused, true);
   await h.api<BoardSnapshot>(`/api/shots/${videoShot.id}`, 'PUT', { fields: { ...fields, description: '改为夜景，属于新的视觉要求' }, expectedShotRevision: videoShot.revision });
   await h.restart();
+  assert.equal((await h.generation(project.id, image.id)).plan.imageQuality, 'low');
   assert.equal((await h.generation(project.id, pending.id)).remoteTaskId, remoteId);
   assert.equal((await h.generation(project.id, pending.id)).pollingPaused, true);
   h.state.tasks.get(remoteId)!.status = 'succeeded';

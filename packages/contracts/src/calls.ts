@@ -3,6 +3,8 @@ export interface Reservation { currency: 'USD' | 'CNY'; amount: number; singleLi
 export interface CallRecord {
   id: string; projectId: string; providerId: string; jobId: string; status: CallStatus;
   currency: Reservation['currency']; reservedAmount: number; actualAmount: number | null;
+  /** No local reservation was configured; supplier charges remain unknown. */
+  budgetMode?: 'none';
   draftId: string | null; error: { code: string; message: string } | null;
   createdAt: string; updatedAt: string;
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { invariant } from '../../../../packages/contracts/src/errors.ts';
 import { record, text } from '../../../../packages/domain/src/validation.ts';
-import { fontHealth, toolHealth } from '../../../../packages/media/src/index.ts';
+import { ffmpegHealth, ffprobeHealth, fontHealth } from '../../../../packages/media/src/index.ts';
 import type { ServerConfig } from '../config.ts';
 import { APPLICATION_VERSION } from '../config/application.ts';
 import type { ApplicationContext } from './context.ts';
@@ -11,9 +11,9 @@ type SystemContext = Pick<ApplicationContext, 'store'>;
 
 export async function readHealth({ store }: SystemContext, config: Pick<ServerConfig, 'dataDir' | 'projectsDir'>) {
   const settings = store.getSettings();
-  const [ffmpeg, ffprobe] = await Promise.all([toolHealth(settings.ffmpegPath), toolHealth(settings.ffprobePath)]);
+  const [ffmpeg, ffprobe] = await Promise.all([ffmpegHealth(settings.ffmpegPath), ffprobeHealth(settings.ffprobePath)]);
   const subtitleFont = settings.subtitleFontPath ? await fontHealth(settings.subtitleFontPath) : undefined;
-  return { status: ffmpeg.available && ffprobe.available ? 'ok' : 'degraded', version: APPLICATION_VERSION, schemaVersion: store.schemaVersion, ffmpeg, ffprobe, subtitleFont, dataDir: config.dataDir, projectsDir: config.projectsDir };
+  return { status: ffmpeg.available && ffprobe.available && ffmpeg.capabilities?.subtitles ? 'ok' : 'degraded', version: APPLICATION_VERSION, schemaVersion: store.schemaVersion, ffmpeg, ffprobe, subtitleFont, dataDir: config.dataDir, projectsDir: config.projectsDir };
 }
 
 export async function updateSettings({ store }: SystemContext, value: unknown) {

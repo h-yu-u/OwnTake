@@ -1,6 +1,7 @@
 import { invariant } from '../../contracts/src/errors.ts';
 import type { ProviderProfile } from '../../contracts/src/providers.ts';
 import { ProviderCallError } from './errors.ts';
+import { describeConnectionFailure, providerHttpError } from './http-error.ts';
 import { MAX_GENERATION_REQUEST_BYTES } from './generation-validation.ts';
 
 interface RequestOptions {
@@ -42,8 +43,8 @@ export async function generationJsonRequest(profile: ProviderProfile, key: strin
       ...(encoded === undefined ? {} : { body: encoded }),
     });
     if (!response.ok) {
+      if (options.phase === 'submit') throw await providerHttpError(response, controller);
       controller.abort();
-      if (options.phase === 'submit' && (response.status >= 500 || response.status === 408)) throw new ProviderCallError('submission_unknown', 'PROVIDER_SUBMISSION_UNKNOWN', `生成服务返回 HTTP ${response.status}，无法确认是否已处理；不会自动重发。`, 502, response.status);
       throw new ProviderCallError('http_rejected', 'PROVIDER_HTTP_REJECTED', `生成服务拒绝本次 ${options.method} 请求（HTTP ${response.status}）；未重新提交生成任务。`, 502, response.status);
     }
     const declared = Number(response.headers.get('content-length'));
@@ -70,7 +71,7 @@ export async function generationJsonRequest(profile: ProviderProfile, key: strin
     catch { throw malformed('PROVIDER_INVALID_JSON'); }
   } catch (error) {
     if (error instanceof ProviderCallError) throw error;
-    if (options.phase === 'submit') throw new ProviderCallError('submission_unknown', 'PROVIDER_SUBMISSION_UNKNOWN', timedOut ? '生成请求超时，远端是否已处理不明；不会自动重发。' : '生成请求连接中断，远端是否已处理不明；不会自动重发。', timedOut ? 504 : 502);
+    if (options.phase === 'submit') throw new ProviderCallError('submission_unknown', 'PROVIDER_SUBMISSION_UNKNOWN', `${timedOut ? `生成请求超过 ${profile.timeoutMs / 1000} 秒等待上限` : describeConnectionFailure(error)}，远端是否已处理不明；保留预留，不会自动重发。`, timedOut ? 504 : 502);
     throw new ProviderCallError('invalid_response', options.phase === 'poll' ? 'PROVIDER_POLL_UNAVAILABLE' : 'PROVIDER_CANCEL_UNCONFIRMED', options.phase === 'poll' ? '暂时无法查询原任务状态；请保留原任务标识并再次查询，不应重新提交。' : '取消请求未得到可靠确认；请查询原任务状态，不应认为任务已经取消。', timedOut ? 504 : 502);
   } finally {
     clearTimeout(timeout);

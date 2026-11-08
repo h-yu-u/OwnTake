@@ -1,6 +1,6 @@
 import { invariant } from '../../../../packages/contracts/src/errors.ts';
 import { record, resourceId } from '../../../../packages/domain/src/validation.ts';
-import { fontHealth } from '../../../../packages/media/src/index.ts';
+import { ffprobeHealth, fontHealth, resolveRenderFfmpeg } from '../../../../packages/media/src/index.ts';
 import type { Job } from '../../../../packages/contracts/src/index.ts';
 import type { Store } from '../../../../packages/storage/src/index.ts';
 import { hashFile, resolveAsset } from '../assets.ts';
@@ -25,7 +25,11 @@ export async function requestExport({ store, scheduler }: Pick<ApplicationContex
   const original = existingExport(store, dedupeKey, timeline.id);
   if (original) return original;
 
-  const mediaSettings = store.getSettings();
+  const mediaSettings = { ...store.getSettings() };
+  mediaSettings.ffmpegPath = await resolveRenderFfmpeg(mediaSettings.ffmpegPath, timeline.captions.length > 0);
+  const ffprobe = await ffprobeHealth(mediaSettings.ffprobePath);
+  invariant(ffprobe.available, 'FFPROBE_UNAVAILABLE', 'ffprobe 无法启动，请检查媒体工具安装与路径。', 503);
+  mediaSettings.ffprobePath = ffprobe.path;
   let subtitleFontSha256: string | undefined;
   if (mediaSettings.subtitleFontPath && timeline.captions.length) {
     const font = await fontHealth(mediaSettings.subtitleFontPath);

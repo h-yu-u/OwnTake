@@ -104,7 +104,8 @@ export function compileFrameReviewRequest(value: ProviderProfile, raw: FrameRevi
   }
   const body: Record<string, unknown> = {
     model: profile.model, messages: [{ role: 'system', content: reviewInstruction }, { role: 'user', content }],
-    max_completion_tokens: profile.maxOutputTokens, stream: false, n: 1, store: false, tool_choice: 'none',
+    // The API rejects tool_choice without tools, including the value "none".
+    max_completion_tokens: profile.maxOutputTokens, stream: false, n: 1, store: false,
     response_format: { type: 'json_schema', json_schema: { name: 'owntake_frame_review_v1', strict: true, schema: reviewSchema(input.frames.map(item => item.id)) } },
   };
   invariant(Buffer.byteLength(JSON.stringify(body)) <= MAX_STUDIO_REQUEST_BYTES, 'STUDIO_REQUEST_TOO_LARGE', '增强操作请求超过 8 MiB，请减少输入。');

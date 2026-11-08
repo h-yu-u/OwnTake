@@ -10,3 +10,6 @@ export type * from '../../../packages/contracts/src/runtimes.ts';
 export type * from '../../../packages/contracts/src/desktop.ts';
 export type * from '../../../packages/contracts/src/story.ts';
 export type ViewId = 'stories' | 'projects' | 'storyboard' | 'workbench' | 'studio' | 'jobs' | 'export' | 'settings';
+
+export type WorkbenchTab = 'timeline' | 'captions' | 'audio';
+export type JobsTab = 'generation' | 'speech' | 'studio' | 'processing';

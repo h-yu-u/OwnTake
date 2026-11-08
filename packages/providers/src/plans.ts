@@ -3,7 +3,7 @@ import type { CapabilityIssue, CompiledGenerationInput, GenerationPlan, PlanVali
 import { strictRecord, validateProfile } from './profiles.ts';
 
 export function parseGenerationPlan(value: unknown): GenerationPlan {
-  const input = strictRecord(value, ['kind', 'inputMode', 'prompt', 'ratio', 'durationSec', 'referenceArtifactIds'], 'INVALID_PLAN');
+  const input = strictRecord(value, ['kind', 'inputMode', 'prompt', 'ratio', 'durationSec', 'imageQuality', 'referenceArtifactIds'], 'INVALID_PLAN');
   invariant(input.kind === 'image' || input.kind === 'video', 'INVALID_PLAN', '生成媒体类型无效。');
   invariant(typeof input.inputMode === 'string' && ['text', 'first_frame', 'first_last_frame', 'references'].includes(input.inputMode), 'INVALID_PLAN', '生成输入方式无效。');
   invariant(typeof input.prompt === 'string' && input.prompt.trim().length > 0 && input.prompt.length <= 20_000 && !input.prompt.includes('\0'), 'INVALID_PLAN', '生成提示词不能为空，且不能超过 20000 字符。');
@@ -11,7 +11,8 @@ export function parseGenerationPlan(value: unknown): GenerationPlan {
   invariant(Array.isArray(input.referenceArtifactIds) && input.referenceArtifactIds.length <= 16 && input.referenceArtifactIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id)), 'INVALID_PLAN', '参考素材必须是已登记的素材标识，且不能超过 16 个。');
   invariant(new Set(input.referenceArtifactIds).size === input.referenceArtifactIds.length, 'INVALID_PLAN', '参考素材不能重复。');
   if (input.durationSec !== undefined) invariant(typeof input.durationSec === 'number' && Number.isFinite(input.durationSec) && input.durationSec > 0 && input.durationSec <= 600, 'INVALID_PLAN', '生成时长必须介于 0–600 秒。');
-  return { kind: input.kind, inputMode: input.inputMode as GenerationPlan['inputMode'], prompt: input.prompt, ratio: input.ratio, ...(input.durationSec === undefined ? {} : { durationSec: input.durationSec as number }), referenceArtifactIds: [...input.referenceArtifactIds] as string[] };
+  if (input.imageQuality !== undefined) invariant(input.kind === 'image' && typeof input.imageQuality === 'string' && ['low', 'medium', 'high'].includes(input.imageQuality), 'INVALID_PLAN', '图片质量仅支持 low、medium、high，且不能用于视频。');
+  return { kind: input.kind, inputMode: input.inputMode as GenerationPlan['inputMode'], prompt: input.prompt, ratio: input.ratio, ...(input.durationSec === undefined ? {} : { durationSec: input.durationSec as number }), ...(input.imageQuality === undefined ? {} : { imageQuality: input.imageQuality as GenerationPlan['imageQuality'] }), referenceArtifactIds: [...input.referenceArtifactIds] as string[] };
 }
 
 /** No network, no input substitutions and no automatic downgrade of reference modes. */

@@ -13,7 +13,7 @@ export function generationTone(status: GenerationStatus): 'success' | 'error' | 
 export function initialGenerationPlan(shot: Shot, ratio: Ratio): GenerationPlan {
   const kind = shot.mode === 'generate_image' ? 'image' : 'video';
   return { kind, inputMode: shot.referenceArtifactIds.length ? 'references' : 'text', prompt: [shot.description, shot.action].filter(Boolean).join('\n'), ratio,
-    ...(kind === 'video' ? { durationSec: shot.durationMs / 1000 } : {}), referenceArtifactIds: [...shot.referenceArtifactIds] };
+    ...(kind === 'video' ? { durationSec: shot.durationMs / 1000 } : { imageQuality: 'low' as const }), referenceArtifactIds: [...shot.referenceArtifactIds] };
 }
 export function parseDurationChoices(input: string): number[] | null {
   if (!input.trim()) return [];

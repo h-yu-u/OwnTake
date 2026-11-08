@@ -206,14 +206,14 @@ test('abort before dispatch sends nothing while abort after acceptance never cla
   }
 });
 
-test('review binds each PNG, SHA, dimensions and ordered label to a strict JSON Schema request', async () => {
+test('review binds PNG evidence to strict JSON without sending tool controls when no tools are offered', async () => {
   let requests = 0;
   const original = JSON.stringify(review);
   await localServer(async (request, response) => {
     requests += 1; assert.equal(request.method, 'POST'); assert.equal(request.url, '/v1/chat/completions');
     assert.equal(request.headers.authorization, 'Bearer private-key');
     const body = await readJson(request);
-    assert.equal(body.model, 'user-chosen-model'); assert.equal(body.n, 1); assert.equal(body.stream, false); assert.equal(body.store, false); assert.equal(body.tool_choice, 'none'); assert.equal(body.tools, undefined);
+    assert.equal(body.model, 'user-chosen-model'); assert.equal(body.n, 1); assert.equal(body.stream, false); assert.equal(body.store, false); assert.equal(body.tool_choice, undefined); assert.equal(body.tools, undefined);
     const schema = body.response_format.json_schema;
     assert.equal(schema.strict, true); assert.equal(schema.schema.additionalProperties, false);
     assert.deepEqual(schema.schema.required, ['summary', 'sampledVerdict', 'issues', 'uncertainties']);

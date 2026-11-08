@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import type { GenerationPlan, ProviderProfile } from '../packages/contracts/src/providers.ts';
 import { callReasoning, normalizeBaseUrl, parseGenerationPlan, ProviderCallError, validateAndCompile, validateProfile } from '../packages/providers/src/index.ts';
 import { NativeRuntime } from '../packages/runtimes/src/native.ts';
+import { describeHttpRejection } from '../packages/providers/src/http-error.ts';
 
 const fields = { title: '清晨', purpose: '建立环境', description: '街道泛起晨光', action: '镜头缓缓前移', durationMs: 4000, caption: '早安', mode: 'generate_video', referenceArtifactIds: [] };
 const operations = [{ id: 'operation_1', kind: 'add', fields }];
@@ -59,7 +60,7 @@ test('capability compilation preserves both frames and explicitly requires repla
   assert.throws(() => parseGenerationPlan({ ...plan, referenceArtifactIds: ['https://untrusted.invalid/media'] }), { code: 'INVALID_PLAN' });
 });
 
-test('reasoning makes exactly one bounded POST and returns validated operations and safe usage', async () => {
+test('reasoning makes one bounded POST without unsupported tool controls and returns validated operations and safe usage', async () => {
   let calls = 0;
   await localServer(async (request, response) => {
     calls += 1;
@@ -68,7 +69,7 @@ test('reasoning makes exactly one bounded POST and returns validated operations 
     const body = await readJson(request);
     assert.equal(body.model, 'user-selected-model'); assert.equal(body.max_completion_tokens, 4096);
     assert.equal(body.n, 1); assert.equal(body.stream, false); assert.equal(body.store, false);
-    assert.equal(body.tool_choice, 'none'); assert.equal(body.tools, undefined);
+    assert.equal(body.tool_choice, undefined); assert.equal(body.tools, undefined);
     assert.equal(body.response_format.json_schema.strict, true);
     assert.equal(body.response_format.json_schema.schema.additionalProperties, false);
     assert.equal(JSON.parse(body.messages[1].content).brief, '拍一段清晨街景');
@@ -111,6 +112,46 @@ test('HTTP errors are redacted, ambiguous server errors remain unknown and redir
       });
     });
     assert.equal(calls, 1);
+  }
+});
+
+test('HTTP rejection diagnostics allow only known codes and parameters, never supplier prose or arbitrary fields', () => {
+  for (const [status, code, explanation] of [
+    [401, 'invalid_api_key', /API Key 无效/], [429, 'insufficient_quota', /余额或额度不足/],
+    [429, 'rate_limit_exceeded', /限流/], [404, 'model_not_found', /模型不存在或当前账号无权/],
+    [400, 'unsupported_parameter', /不支持请求中的某个参数/], [400, 'invalid_json_schema', /JSON Schema/],
+  ] as const) {
+    const message = describeHttpRejection(status, { error: { code, param: 'response_format', message: 'secret-key and private brief', request: 'private brief' } });
+    assert.match(message, new RegExp(`HTTP ${status}`)); assert(message.includes(code)); assert.match(message, explanation);
+    assert.match(message, /response_format/); assert.doesNotMatch(message, /secret-key|private brief/);
+  }
+  for (const raw of [null, [], 'secret-key', { error: { code: 'secret-key', param: 'private brief', type: '__proto__', message: 'secret-key' } }]) {
+    assert.doesNotMatch(describeHttpRejection(400, raw), /secret-key|private brief|__proto__/);
+  }
+  assert.match(describeHttpRejection(429, { error: { code: null, type: 'insufficient_quota' } }), /余额或额度不足/);
+  assert.match(describeHttpRejection(429, {}), /未取得具体原因/);
+});
+
+test('a rejected POST retains bounded safe diagnostics and its HTTP classification even with broken or slow bodies', async () => {
+  for (const mode of ['json', 'malformed', 'oversized', 'declared-oversized', 'slow', 'disconnect']) {
+    let calls = 0;
+    await localServer((_request, response) => {
+      calls++;
+      const body = JSON.stringify({ error: { code: 'insufficient_quota', message: 'secret-key private brief' } });
+      response.writeHead(429, { 'Content-Type': 'application/json', ...(mode === 'declared-oversized' ? { 'Content-Length': 20_000 } : {}) });
+      if (mode === 'slow' || mode === 'disconnect') { response.write('{'); if (mode === 'disconnect') setTimeout(() => response.destroy(), 20); return; }
+      response.end(mode === 'json' ? body : mode === 'malformed' ? '{secret-key' : 'x'.repeat(20_000));
+    }, async url => {
+      await assert.rejects(callReasoning({ ...profile(url), timeoutMs: 2000 }, 'secret-key', { brief: 'private brief', shots: [] }), error => {
+        assert(error instanceof ProviderCallError);
+        assert.equal(error.classification, 'http_rejected'); assert.equal(error.httpStatus, 429);
+        assert.match(error.message, /HTTP 429/);
+        if (mode === 'json') assert.match(error.message, /insufficient_quota/);
+        assert.doesNotMatch(JSON.stringify(error) + error.message, /secret-key|private brief/);
+        return true;
+      });
+    });
+    assert.equal(calls, 1, mode);
   }
 });
 

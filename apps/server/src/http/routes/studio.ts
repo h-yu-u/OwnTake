@@ -2,10 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { ApplicationContext } from '../../application/context.ts';
 import { discoverRuntimes, inspectRuntime, readStudioFrame, requestStudioOperation } from '../../application/studio.ts';
+import { cancelBatchSpeech, requestBatchSpeech } from '../../application/batch-speech.ts';
 import { publicStudio } from '../../studio-repository.ts';
 import { HTTP_CACHE } from '../../config/http.ts';
 import { FrameParams, IdParams, StudioSettlement } from '../schemas/common.ts';
-import { RuntimeInput, StudioCreate } from '../schemas/studio.ts';
+import { BatchSpeechCreate, SpeechBatchParams, RuntimeInput, StudioCreate } from '../schemas/studio.ts';
 
 export function registerStudioRoutes(fastify: FastifyInstance, context: Pick<ApplicationContext, 'store' | 'runtimes' | 'studio' | 'studioRunner'>): void {
   const app = fastify.withTypeProvider<TypeBoxTypeProvider>();
@@ -19,6 +20,10 @@ export function registerStudioRoutes(fastify: FastifyInstance, context: Pick<App
   }, async request => context.runtimes.save(request.body, request.params.id));
   app.post('/runtimes/:id/inspect', { schema: { params: IdParams } }, async request => inspectRuntime(context, request.params.id));
   app.get('/projects/:id/studio-operations', { schema: { params: IdParams } }, async request => context.studio.list(request.params.id));
+  app.post('/projects/:id/speech-batches/:batchId/cancel', { schema: { params: SpeechBatchParams } }, async request => cancelBatchSpeech(context, request.params.id, request.params.batchId));
+  app.post('/projects/:id/speech-batches', {
+    schema: { params: IdParams, body: BatchSpeechCreate },
+  }, async (request, reply) => reply.code(202).send(requestBatchSpeech(context, request.params.id, request.body)));
   app.post('/projects/:id/studio-operations', {
     schema: { params: IdParams, body: StudioCreate },
     config: { validation: {

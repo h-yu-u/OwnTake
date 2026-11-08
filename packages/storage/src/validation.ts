@@ -1,3 +1,4 @@
+import { MAX_AUDIO_TRACKS } from '../../contracts/src/index.ts';
 import { createHash } from 'node:crypto';
 import { AppError, invariant } from '../../contracts/src/errors.ts';
 import type { Artifact, MediaInfo, Ratio, TimelineDraft } from '../../contracts/src/index.ts';
@@ -90,7 +91,7 @@ export function validateTimeline(draft: TimelineDraft, resolve: (id: string) => 
   finiteNumber(draft.fps, '导出帧率', 1, 120);
   invariant(Array.isArray(draft.clips) && draft.clips.length <= 500, 'INVALID_INPUT', '时间线片段无效或过多。');
   invariant(Array.isArray(draft.captions) && draft.captions.length <= 10000, 'INVALID_INPUT', '字幕数据无效或过多。');
-  invariant(Array.isArray(draft.audio) && draft.audio.length <= 100, 'INVALID_INPUT', '音轨数据无效或过多。');
+  invariant(Array.isArray(draft.audio) && draft.audio.length <= MAX_AUDIO_TRACKS, 'INVALID_INPUT', '音轨数据无效或过多。');
   for (const clip of draft.clips) {
     invariant(clip && typeof clip === 'object', 'INVALID_INPUT', '时间线片段无效。');
     validateId(clip.artifactId);

@@ -51,7 +51,7 @@ export class ModelRunner {
       const unknown = classification === 'submission_unknown' || classification === 'cancelled';
       store.transaction(() => {
         call.status = unknown ? 'submission_unknown' : 'failed';
-        call.error = { code: unknown ? 'SUBMISSION_UNKNOWN' : classification === 'http_rejected' ? 'PROVIDER_REJECTED' : 'INVALID_MODEL_RESPONSE', message: unknown ? '远端处理结果不明，预留额度保留。请核对账号记录；不会自动重发。' : classification === 'http_rejected' ? '模型接口返回拒绝响应，请检查连接、模型权限与参数；费用仍需核对。' : '模型结果或调用配置未通过校验，既有分镜没有变化；费用仍需核对。' };
+        call.error = { code: unknown ? 'SUBMISSION_UNKNOWN' : classification === 'http_rejected' ? 'PROVIDER_REJECTED' : 'INVALID_MODEL_RESPONSE', message: unknown ? call.budgetMode === 'none' ? '远端处理结果不明，请核对账号记录；不会自动重发。' : '远端处理结果不明，预留额度保留。请核对账号记录；不会自动重发。' : error instanceof ProviderCallError && classification === 'http_rejected' ? error.message : '模型结果或调用配置未通过校验，既有分镜没有变化；费用仍需核对。' };
         this.repository.saveCall(call); store.updateJob(call.jobId, { status: unknown ? 'blocked' : 'failed', error: call.error });
       });
     }

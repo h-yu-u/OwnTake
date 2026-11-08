@@ -14,13 +14,13 @@ import { ProviderRepository, reservationInput } from './provider-repository.ts';
 import { resolveAsset } from './assets.ts';
 import type { InlineReceipt } from './inline-receipt.ts';
 export interface StoredGeneration extends GenerationRecord {
-  operationId: string; provider: ProviderProfile; credentialRef: string | null; reservation: Reservation;
+  operationId: string; provider: ProviderProfile; credentialRef: string | null; reservation: Reservation | null;
   outputArtifactId: string; outputUrl?: string; stagedRelativePath?: string; inlineReceipt?: InlineReceipt;
   nextPollAt: number; pollFailures: number; cancelSent: boolean; settlementNote?: string;
 }
 export function publicGeneration(value: StoredGeneration): GenerationRecord {
-  const { id, projectId, shotId, shotRevision, visualRevision, providerId, providerModel, planId, attemptId, jobId, plan, status, remoteTaskId, lastRemoteStatus, cancelRequested, pollingPaused, currency, reservedAmount, actualAmount, artifactId, candidateId, error, createdAt, updatedAt } = value;
-  return { id, projectId, shotId, shotRevision, visualRevision, providerId, providerModel, planId, attemptId, jobId, plan, status, remoteTaskId, lastRemoteStatus, cancelRequested, pollingPaused, currency, reservedAmount, actualAmount, artifactId, candidateId, error, createdAt, updatedAt };
+  const { id, projectId, shotId, shotRevision, visualRevision, providerId, providerModel, planId, attemptId, jobId, plan, status, remoteTaskId, lastRemoteStatus, cancelRequested, pollingPaused, currency, reservedAmount, actualAmount, artifactId, candidateId, error, createdAt, updatedAt, budgetMode } = value;
+  return { id, projectId, shotId, shotRevision, visualRevision, providerId, providerModel, planId, attemptId, jobId, plan, status, remoteTaskId, lastRemoteStatus, cancelRequested, pollingPaused, currency, reservedAmount, actualAmount, artifactId, candidateId, error, createdAt, updatedAt, ...(budgetMode ? { budgetMode } : {}) };
 }
 export class GenerationRepository {
   readonly store: Store; readonly board: StoryboardStore; readonly providers: ProviderRepository;
@@ -46,7 +46,7 @@ export class GenerationRepository {
   }
   async create(shotId: string, value: unknown): Promise<StoredGeneration> {
     const b = record(value), providerId = resourceId(b.providerId), operationId = resourceId(b.clientRequestId), plan = parseGenerationPlan(b.plan);
-    const expected = integer(b.expectedShotRevision, '镜头版本', 1, Number.MAX_SAFE_INTEGER), expectedProviderUpdatedAt = text(b.expectedProviderUpdatedAt, '模型连接版本', 100), reservation = reservationInput(b.reservation);
+    const expected = integer(b.expectedShotRevision, '镜头版本', 1, Number.MAX_SAFE_INTEGER), expectedProviderUpdatedAt = text(b.expectedProviderUpdatedAt, '模型连接版本', 100), reservation = b.reservation === undefined ? null : reservationInput(b.reservation);
     const shot = this.board.getShot(shotId), hash = requestHash({ shotId, expected, providerId, expectedProviderUpdatedAt, plan, reservation });
     const existing = this.store.db.prepare('SELECT request_hash,body_json FROM generations WHERE project_id=? AND operation_id=?').get(shot.projectId, operationId);
     if (existing) { invariant(existing.request_hash === hash, 'IDEMPOTENCY_CONFLICT', '同一生成操作标识不能用于不同输入', 409); return JSON.parse(String(existing.body_json)); }
@@ -61,11 +61,11 @@ export class GenerationRepository {
       const current = this.board.getShot(shotId);
       invariant(!current.archived && current.revision === expected, 'REVISION_CONFLICT', '镜头已改变，请重新审阅生成计划', 409);
       invariant(profile.updatedAt === expectedProviderUpdatedAt && this.providers.getProfile(providerId).profile.updatedAt === expectedProviderUpdatedAt, 'PROVIDER_CHANGED', '模型连接已改变，请重新审阅发送目标', 409);
-      invariant(this.providers.exposure(shot.projectId, reservation.currency) + reservation.amount <= reservation.projectLimit + 0.0000001, 'BUDGET_EXCEEDED', '已确认费用与未核对预留超过该币种的项目额度', 409);
+      if (reservation) invariant(this.providers.exposure(shot.projectId, reservation.currency) + reservation.amount <= reservation.projectLimit + 0.0000001, 'BUDGET_EXCEEDED', '已确认费用与未核对预留超过该币种的项目额度', 409);
       const id = randomUUID(), now = new Date().toISOString(), job = this.store.createJob({ projectId: shot.projectId, type: 'generation', payload: { generationId: id }, dedupeKey: `generation:${shot.projectId}:${operationId}` });
-      const generation: StoredGeneration = { id, projectId: shot.projectId, shotId, shotRevision: current.revision, visualRevision: current.visualRevision, providerId, providerModel: profile.model, planId: randomUUID(), attemptId: randomUUID(), jobId: job.id, plan, status: 'queued', remoteTaskId: null, lastRemoteStatus: null, cancelRequested: false, pollingPaused: false, currency: reservation.currency, reservedAmount: reservation.amount, actualAmount: null, artifactId: null, candidateId: null, error: null, createdAt: now, updatedAt: now, operationId, provider: profile, credentialRef, reservation, outputArtifactId: randomUUID(), nextPollAt: 0, pollFailures: 0, cancelSent: false };
+      const generation: StoredGeneration = { id, projectId: shot.projectId, shotId, shotRevision: current.revision, visualRevision: current.visualRevision, providerId, providerModel: profile.model, planId: randomUUID(), attemptId: randomUUID(), jobId: job.id, plan, status: 'queued', remoteTaskId: null, lastRemoteStatus: null, cancelRequested: false, pollingPaused: false, currency: reservation?.currency ?? 'USD', reservedAmount: reservation?.amount ?? 0, actualAmount: null, ...(!reservation ? { budgetMode: 'none' as const } : {}), artifactId: null, candidateId: null, error: null, createdAt: now, updatedAt: now, operationId, provider: profile, credentialRef, reservation, outputArtifactId: randomUUID(), nextPollAt: 0, pollFailures: 0, cancelSent: false };
       this.store.db.prepare('INSERT INTO generations(id,project_id,shot_id,operation_id,request_hash,status,body_json) VALUES(?,?,?,?,?,?,?)').run(id, current.projectId, shotId, operationId, hash, generation.status, JSON.stringify(generation));
-      this.store.appendEvent(current.projectId, 'generation.created', { generationId: id, shotId, visualRevision: current.visualRevision, reservedAmount: reservation.amount, currency: reservation.currency }); return generation;
+      this.store.appendEvent(current.projectId, 'generation.created', { generationId: id, shotId, visualRevision: current.visualRevision, ...(reservation ? { reservedAmount: reservation.amount, currency: reservation.currency } : { budgetMode: 'none' }) }); return generation;
     });
   }
   settle(id: string, input: unknown): GenerationRecord {

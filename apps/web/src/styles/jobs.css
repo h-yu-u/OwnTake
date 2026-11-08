@@ -1,0 +1,39 @@
+.jobs-workspace { padding: 0; overflow: hidden; }
+.jobs-tabs { display: flex; gap: 8px; padding: 0 18px; border-bottom: 1px solid var(--line-soft); overflow-x: auto; }
+.jobs-tabs > button { flex-shrink: 0; border: 0; border-bottom: 2px solid transparent; padding: 17px 12px; color: var(--muted); background: transparent; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.jobs-tabs > button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.jobs-tabs > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+.jobs-tabs > button > span { margin-left: 9px; font-size: 11px; color: var(--faint); }
+.jobs-task-panel { height: clamp(320px, calc(100dvh - 365px), 760px); max-height: 760px; min-height: 0; padding: 22px; overflow: hidden; }
+.jobs-task-panel > .generation-tasks, .jobs-task-panel > .studio-operations { height: 100%; min-height: 0; max-height: 100%; display: flex; flex-direction: column; }
+.jobs-task-panel .section-heading { flex-shrink: 0; margin-bottom: 16px; }
+.jobs-task-panel .studio-operation-list, .jobs-task-panel .generation-task-list { flex: 1; min-height: 0; max-height: 100%; overflow: auto; overscroll-behavior: contain; padding-right: 5px; align-content: start; }
+.jobs-task-panel .studio-empty, .jobs-task-panel .generation-empty { overflow: auto; min-height: 0; }
+.jobs-task-panel.jobs-scroll-panel { overflow: auto; overscroll-behavior: contain; }
+.jobs-task-panel .speech-batches { margin: 0; }
+.jobs-task-panel .batch-operation-details { margin-top: 20px; }
+.jobs-task-panel .batch-operation-details .studio-operation-list { max-height: min(55dvh, 600px); }
+.jobs-task-panel .job-card, .jobs-task-panel .studio-operation, .jobs-task-panel .generation-task, .jobs-task-panel .speech-batch-card { min-width: 0; }
+.jobs-view .job-copy, .jobs-view .generation-task-title { min-width: 0; }
+.jobs-view .job-error, .jobs-view .generation-error { overflow-wrap: anywhere; }
+.studio-view .page-heading > .heading-actions { flex-wrap: wrap; }
+@media (min-width: 761px) {
+  .app-shell:has(.jobs-view) { height: 100dvh; min-height: 0; grid-template-rows: 68px minmax(0, 1fr); }
+  .app-shell:has(.jobs-view) > .global-nav { min-height: 0; overflow-y: auto; }
+  .app-shell:has(.jobs-view) > main { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .jobs-view { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+  .jobs-view > .page-heading, .jobs-view > .metric-grid { flex-shrink: 0; }
+  .jobs-view > .page-heading { margin-bottom: 20px; }
+  .jobs-view > .metric-grid { margin-bottom: 20px; }
+  .jobs-workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; max-height: 850px; }
+  .jobs-tabs { flex-shrink: 0; }
+  .jobs-task-panel { height: auto; flex: 1; min-height: 0; }
+}
+@media (max-width: 760px) {
+  .jobs-tabs { gap: 0; padding: 0 8px; }
+  .jobs-tabs > button { padding: 14px 10px; font-size: 12px; }
+  .jobs-task-panel { height: min(68dvh, 620px); max-height: 620px; padding: 14px; }
+  .jobs-task-panel .studio-operation, .jobs-task-panel .speech-batch-card { padding: 16px; }
+  .jobs-task-panel .section-heading { gap: 12px; flex-wrap: wrap; }
+  .jobs-task-panel .section-heading h2 { font-size: 16px; }
+}

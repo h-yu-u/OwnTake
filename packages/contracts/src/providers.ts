@@ -45,6 +45,8 @@ export interface GenerationPlan {
   prompt: string;
   ratio: Ratio;
   durationSec?: number;
+  /** Omitted in historical plans to preserve the provider's original default. */
+  imageQuality?: 'low' | 'medium' | 'high';
   referenceArtifactIds: string[];
 }
 export interface CapabilityIssue { code: string; field: string; message: string }

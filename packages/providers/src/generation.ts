@@ -40,7 +40,7 @@ export function compileGenerationRequest(profileValue: ProviderProfile, planValu
   }
   let request: GenerationRequest;
   if (profile.kind === 'openai-images') {
-    request = { endpoint: '/images/generations', body: { model: profile.model, prompt: plan.prompt, n: 1, output_format: 'png', size: imageSizes[plan.ratio] } };
+    request = { endpoint: '/images/generations', body: { model: profile.model, prompt: plan.prompt, n: 1, output_format: 'png', size: imageSizes[plan.ratio], ...(plan.imageQuality ? { quality: plan.imageQuality } : {}) } };
   } else {
     const content: Record<string, unknown>[] = [{ type: 'text', text: plan.prompt }];
     plan.referenceArtifactIds.forEach((id, index) => {

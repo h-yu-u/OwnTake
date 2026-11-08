@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { NButton, NImage } from 'naive-ui';
+import type { ImageInst } from 'naive-ui';
 import type { Artifact } from '../types.ts';
 import { artifactUrl, thumbnailUrl } from '../lib/api.ts';
 import { formatBytes, formatDuration } from '../lib/timeline.ts';
 import AppIcon from './AppIcon.vue';
 const props = defineProps<{ artifact: Artifact | null; compact?: boolean }>();
 const failed = ref(false);
+const imagePreview = ref<ImageInst | null>(null);
 watch(() => props.artifact?.id, () => { failed.value = false; });
 </script>
 <template>
   <div class="media-preview" :class="{ compact }">
     <template v-if="artifact && !failed">
-      <img v-if="artifact.kind === 'image'" :key="artifact.id" :src="artifactUrl(artifact.id)" :alt="artifact.name" @error="failed = true" />
+      <template v-if="artifact.kind === 'image'">
+        <NImage :key="artifact.id" ref="imagePreview" class="media-preview-image" :src="artifactUrl(artifact.id)" :alt="artifact.name" object-fit="contain" show-toolbar-tooltip @error="failed = true" />
+        <NButton class="media-preview-expand" size="small" :aria-label="`放大查看 ${artifact.name}`" @click="imagePreview?.showPreview()">放大查看</NButton>
+      </template>
       <video v-else-if="artifact.kind === 'video'" :key="artifact.id" :src="artifactUrl(artifact.id)" :poster="thumbnailUrl(artifact.id)" controls preload="metadata" playsinline @error="failed = true" />
       <div v-else class="audio-preview"><AppIcon name="audio" :size="64" /><span>{{ artifact.name }}</span><audio :key="artifact.id" :src="artifactUrl(artifact.id)" controls preload="metadata" @error="failed = true" /></div>
     </template>

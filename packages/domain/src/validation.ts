@@ -1,3 +1,4 @@
+import { MAX_AUDIO_TRACKS } from '../../contracts/src/index.ts';
 import { invariant } from '../../contracts/src/errors.ts';
 import type { AudioTrack, Caption, CaptionStyle, Ratio, TimelineDraft, TimelineClip } from '../../contracts/src/index.ts';
 export const idPattern = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -40,7 +41,7 @@ export function timelineInput(value: unknown): TimelineDraft & { expectedVersion
   const fps = integer(b.fps, '帧率', 1, 60);
   const totalMs = clips.reduce((sum, clip) => sum + Math.round(clip.durationMs * fps / 1000), 0) / fps * 1000;
   const captions = b.captions ?? [], audio = b.audio ?? [];
-  invariant(Array.isArray(captions) && captions.length <= 1000 && Array.isArray(audio) && audio.length <= 16, 'INVALID_TIMELINE', '字幕最多 1000 条，附加音轨最多 16 条');
+  invariant(Array.isArray(captions) && captions.length <= 1000 && Array.isArray(audio) && audio.length <= MAX_AUDIO_TRACKS, 'INVALID_TIMELINE', `字幕最多 1000 条，附加音轨最多 ${MAX_AUDIO_TRACKS} 条`);
   return { width, height, fps, clips, captions: captions.map(c => captionInput(c, totalMs, fps)), audio: audio.map(a => audioTrackInput(a, totalMs)), expectedVersion: integer(b.expectedVersion ?? 0, '时间线版本', 0, Number.MAX_SAFE_INTEGER) };
 }
 
@@ -87,7 +88,7 @@ export function audioTrackDurationMs(track: AudioTrack, sourceDurationMs: number
 }
 export function validateTimelineOverlays(timeline: TimelineDraft): void {
   const totalMs = timeline.clips.reduce((sum, clip) => sum + Math.round(clip.durationMs * timeline.fps / 1000), 0) / timeline.fps * 1000;
-  invariant(Array.isArray(timeline.captions) && timeline.captions.length <= 1000 && Array.isArray(timeline.audio) && timeline.audio.length <= 16, 'INVALID_TIMELINE', '字幕最多 1000 条，附加音轨最多 16 条');
+  invariant(Array.isArray(timeline.captions) && timeline.captions.length <= 1000 && Array.isArray(timeline.audio) && timeline.audio.length <= MAX_AUDIO_TRACKS, 'INVALID_TIMELINE', `字幕最多 1000 条，附加音轨最多 ${MAX_AUDIO_TRACKS} 条`);
   for (const caption of timeline.captions) captionInput(caption, totalMs, timeline.fps);
   for (const track of timeline.audio) audioTrackInput(track, totalMs);
 }

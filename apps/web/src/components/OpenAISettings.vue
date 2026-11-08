@@ -50,7 +50,7 @@ watch(() => props.savedRevision, () => { show.value = false; editing.value = nul
         </dl>
       </article>
     </div>
-    <p class="panel-footnote">第三方或本地模型可在下方添加协议兼容连接。</p>
+    <p class="panel-footnote">第三方或本地模型可在「其他模型连接」中添加协议兼容连接。</p>
     <OpenAIConnectionDialog v-model:show="show" :connection="editing" :disabled="disabled" :saving="saving" :error="error" @save="emit('save', $event)" />
   </section>
 </template>

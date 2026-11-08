@@ -8,6 +8,7 @@ export const GenerationPlan = Type.Object({
   prompt: Type.String({ maxLength: 20_000 }),
   ratio: Ratio,
   durationSec: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 600 })),
+  imageQuality: Type.Optional(Type.Union([Type.Literal('low'), Type.Literal('medium'), Type.Literal('high')])),
   referenceArtifactIds: Type.Array(ResourceId, { maxItems: 16, uniqueItems: true }),
 }, { additionalProperties: false });
 
@@ -17,7 +18,7 @@ export const GenerationCreate = Type.Object({
   clientRequestId: ResourceId,
   expectedShotRevision: ExistingRevision,
   expectedProviderUpdatedAt: Type.String({ maxLength: 100 }),
-  reservation: Reservation,
+  reservation: Type.Optional(Reservation),
 }, { additionalProperties: true });
 
 export const GenerationReconcile = Type.Object({ remoteTaskId: ResourceId, note: Type.String({ maxLength: 2000 }) }, { additionalProperties: true });

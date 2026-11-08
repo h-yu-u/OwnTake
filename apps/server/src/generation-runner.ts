@@ -131,7 +131,7 @@ export class GenerationRunner {
       const current = this.repository.get(g.id); if (current.status === 'cancelled' || current.status === 'succeeded') return;
       if (g.status === 'submitting') {
         const knownRejection = error instanceof ProviderCallError && ['http_rejected','invalid_response'].includes(error.classification);
-        g.status = knownRejection ? 'failed' : 'submission_unknown'; g.error = { code: knownRejection ? 'GENERATION_REJECTED' : 'SUBMISSION_UNKNOWN', message: knownRejection ? '供应商拒绝请求或返回结果不符合合同。不会重发；费用仍需核对。' : '提交结果不明，远端可能已受理。保留预留，请关联原任务或核对账单；不会自动重发。' };
+        g.status = knownRejection ? 'failed' : 'submission_unknown'; g.error = { code: knownRejection ? 'GENERATION_REJECTED' : 'SUBMISSION_UNKNOWN', message: error instanceof ProviderCallError ? error.message : knownRejection ? '供应商拒绝请求或返回结果不符合合同。不会重发；费用仍需核对。' : '提交结果不明，远端可能已受理。保留预留，请关联原任务或核对账单；不会自动重发。' };
       } else if (g.status === 'waiting_remote') {
         g.pollFailures++; g.nextPollAt = Date.now() + Math.min(30000, 3000 * 2 ** Math.min(g.pollFailures, 4)); g.error = { code: 'POLL_UNAVAILABLE', message: '暂时无法确认原远端任务状态，将退避查询；未重新提交生成。' };
       } else if (this.stopping && g.status === 'queued') return;

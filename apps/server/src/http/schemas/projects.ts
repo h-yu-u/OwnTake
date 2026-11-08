@@ -1,3 +1,4 @@
+import { MAX_AUDIO_TRACKS } from '../../../../../packages/contracts/src/index.ts';
 import { Type } from 'typebox';
 import { ExistingRevision, Ratio, ResourceId, Revision } from './common.ts';
 import { TIMELINE_POLICY } from '../../config/timeline.ts';
@@ -51,7 +52,7 @@ export const TimelineInput = Type.Object({
   fps: Type.Integer({ minimum: 1, maximum: 60 }),
   clips: Type.Array(Clip, { minItems: 1, maxItems: 100 }),
   captions: Type.Optional(Type.Union([Type.Array(Caption, { maxItems: 1000 }), Type.Null()])),
-  audio: Type.Optional(Type.Union([Type.Array(AudioTrack, { maxItems: 16 }), Type.Null()])),
+  audio: Type.Optional(Type.Union([Type.Array(AudioTrack, { maxItems: MAX_AUDIO_TRACKS }), Type.Null()])),
   expectedVersion: Type.Optional(Type.Union([Revision, Type.Null()])),
 }, { additionalProperties: true });
 

@@ -1,4 +1,5 @@
 export { probe, toolHealth, inspectInput } from './probe.ts';
+export { ffmpegHealth, ffprobeHealth, resolveRenderFfmpeg } from './capabilities.ts';
 export type { ProbeOptions } from './probe.ts';
 export { renderTimeline, validateTimeline, timelineDurationMs } from './render.ts';
 export type { RenderOptions, ResolvedArtifact } from './render.ts';

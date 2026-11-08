@@ -1,4 +1,4 @@
-import type { DiscoveredLocalRuntime, LocalRuntimeInput, LocalRuntimeInspection, LocalRuntimeProfile, Reservation, StudioCreateRequest, StudioOperation } from '../types.ts';
+import type { BatchSpeechRequest, DiscoveredLocalRuntime, LocalRuntimeInput, LocalRuntimeInspection, LocalRuntimeProfile, Reservation, StudioCreateRequest, StudioOperation } from '../types.ts';
 import { request } from './api.ts';
 
 export type RuntimeSettingsInput = LocalRuntimeInput & { trustAcknowledged: boolean };
@@ -12,6 +12,8 @@ export const studioApi = {
   inspectRuntime: (id: string) => write<LocalRuntimeInspection>(`/runtimes/${encodeURIComponent(id)}/inspect`, {}),
   list: (projectId: string) => request<StudioOperation[]>(`/projects/${encodeURIComponent(projectId)}/studio-operations`),
   create: (projectId: string, input: StudioCreateRequest) => write<StudioOperation>(`/projects/${encodeURIComponent(projectId)}/studio-operations`, input),
+  batchSpeech: (projectId: string, input: BatchSpeechRequest) => write<StudioOperation[]>(`/projects/${encodeURIComponent(projectId)}/speech-batches`, input),
+  cancelBatch: (projectId: string, batchId: string) => write<StudioOperation[]>(`/projects/${encodeURIComponent(projectId)}/speech-batches/${encodeURIComponent(batchId)}/cancel`, {}),
   cancel: (id: string) => write<StudioOperation>(`/studio-operations/${encodeURIComponent(id)}/cancel`, {}),
   retryIngest: (id: string) => write<StudioOperation>(`/studio-operations/${encodeURIComponent(id)}/retry-ingest`, {}),
   settle: ({ id, ...input }: SettlementInput) => write<StudioOperation>(`/studio-operations/${encodeURIComponent(id)}/settle`, input),

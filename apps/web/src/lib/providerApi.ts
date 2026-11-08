@@ -2,7 +2,7 @@ import type { CallRecord, ProviderProfile, ProviderSummary, Reservation } from '
 import { request } from './api.ts';
 
 export type ProviderInput = Omit<ProviderProfile, 'id' | 'createdAt' | 'updatedAt'> & { key?: string };
-export interface ReasoningRequest { providerId: string; clientRequestId: string; expectedBoardRevision: number; expectedProjectRevision: number; expectedProviderUpdatedAt: string; reservation: Reservation }
+export interface ReasoningRequest { providerId: string; clientRequestId: string; expectedBoardRevision: number; expectedProjectRevision: number; expectedProviderUpdatedAt: string; reservation?: Reservation }
 function write<T>(path: string, body: unknown, method = 'POST'): Promise<T> { return request<T>(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
 export const providerApi = {
   list: () => request<ProviderSummary[]>('/providers'),

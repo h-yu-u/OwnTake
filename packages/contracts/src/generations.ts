@@ -7,6 +7,8 @@ export interface GenerationRecord {
   plan: GenerationPlan; status: GenerationStatus; remoteTaskId: string | null; lastRemoteStatus: string | null;
   cancelRequested: boolean; pollingPaused: boolean;
   currency: Reservation['currency']; reservedAmount: number; actualAmount: number | null;
+  /** Missing on legacy records; none means no local budget was configured, not a free call. */
+  budgetMode?: 'none';
   artifactId: string | null; candidateId: string | null;
   error: { code: string; message: string } | null; createdAt: string; updatedAt: string;
 }

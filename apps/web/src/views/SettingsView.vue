@@ -1,23 +1,60 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
-import { NAlert, NButton, NForm, NFormItem, NInput, NTag } from 'naive-ui';
+import { nextTick, ref } from 'vue';
+import { NTabPane, NTabs } from 'naive-ui';
 import type { AppSettings, DesktopInfo, Health, LocalRuntimeProfile, OpenAIConnectionSummary, ProviderSummary } from '../types.ts';
-import AppIcon from '../components/AppIcon.vue';
+import MediaSettings from '../components/MediaSettings.vue';
 import ProviderSettings from '../components/ProviderSettings.vue';
 import OpenAISettings from '../components/OpenAISettings.vue';
 import RuntimeSettings from '../components/RuntimeSettings.vue';
-import DesktopStatus from '../components/DesktopStatus.vue';
-import NativePathButton from '../components/NativePathButton.vue';
+import WorkspaceSettings from '../components/WorkspaceSettings.vue';
 import type { RuntimeSettingsInput } from '../lib/studioApi.ts';
 import type { ProviderInput } from '../lib/providerApi.ts';
 import type { OpenAIConnectionSave } from '../lib/openaiApi.ts';
-const props = defineProps<{ settings: AppSettings; health: Health | null; disabled: boolean; saving: boolean; checking: boolean; providers: ProviderSummary[]; providerSavedRevision: number; openaiConnections: OpenAIConnectionSummary[]; openaiLoading: boolean; openaiSaving: boolean; openaiSavedRevision: number; openaiError: string; runtimes: LocalRuntimeProfile[]; desktopAvailable: boolean; desktopInfo: DesktopInfo | null; desktopLoading: boolean; desktopError: string }>();
+
+defineProps<{ settings: AppSettings; health: Health | null; disabled: boolean; saving: boolean; checking: boolean; providers: ProviderSummary[]; providerSavedRevision: number; openaiConnections: OpenAIConnectionSummary[]; openaiLoading: boolean; openaiSaving: boolean; openaiSavedRevision: number; openaiError: string; runtimes: LocalRuntimeProfile[]; desktopAvailable: boolean; desktopInfo: DesktopInfo | null; desktopLoading: boolean; desktopError: string }>();
 const emit = defineEmits<{ save: [input: AppSettings]; check: []; saveProvider: [input: { id: string | null; profile: ProviderInput }]; refreshProviders: []; saveOpenai: [input: OpenAIConnectionSave]; refreshOpenai: []; clearOpenaiError: []; saveRuntime: [input: { id: string | null; profile: RuntimeSettingsInput }]; refreshRuntimes: []; refreshDesktop: [] }>();
-const form = reactive({ ...props.settings, subtitleFontPath: props.settings.subtitleFontPath || '' });
-watch(() => props.settings, settings => { Object.assign(form, { ...settings, subtitleFontPath: settings.subtitleFontPath || '' }); });
-function submit() { if (form.ffmpegPath.trim() && form.ffprobePath.trim()) emit('save', { ffmpegPath: form.ffmpegPath.trim(), ffprobePath: form.ffprobePath.trim(), subtitleFontPath: form.subtitleFontPath.trim() }); }
+const tab = ref('media');
+const tabNames = ['media', 'openai', 'providers', 'runtimes', 'workspace'];
+function tabProps(name: string) {
+  return {
+    id: `settings-tab-${name}`, role: 'tab', 'aria-selected': tab.value === name,
+    'aria-controls': `settings-panel-${name}`, tabindex: tab.value === name ? 0 : -1,
+    onKeydown: async (event: KeyboardEvent) => {
+      const index = tabNames.indexOf(name);
+      const next = event.key === 'ArrowRight' ? (index + 1) % tabNames.length
+        : event.key === 'ArrowLeft' ? (index + tabNames.length - 1) % tabNames.length
+        : event.key === 'Home' ? 0 : event.key === 'End' ? tabNames.length - 1 : -1;
+      if (next < 0) return;
+      event.preventDefault();
+      tab.value = tabNames[next]!;
+      await nextTick();
+      document.getElementById(`settings-tab-${tab.value}`)?.focus();
+    },
+  };
+}
 </script>
 
 <template>
-  <div class="settings-view readable-view"><header class="page-heading"><div><p class="eyebrow">YOUR LOCAL STUDIO</p><h1>工作台设置</h1><p class="subheading">检查本地工具，让导入与导出顺畅运行。</p></div><NButton :loading="checking" :disabled="disabled" @click="emit('check')"><template #icon><AppIcon name="refresh" :size="16" /></template>重新检测</NButton></header><DesktopStatus v-if="desktopAvailable" :info="desktopInfo" :loading="desktopLoading" :error="desktopError" :disabled="disabled" @refresh="emit('refreshDesktop')" /><div class="settings-layout"><section class="panel settings-card"><div class="panel-heading"><h2>媒体工具</h2><NTag :bordered="false" :type="health?.status === 'ok' ? 'success' : 'warning'">{{ health?.status === 'ok' ? '工具就绪' : '需要检查' }}</NTag></div><p class="settings-description">使用已安装的 FFmpeg 和 ffprobe。可以填写命令名称，或可执行文件的完整路径。</p><NForm @submit.prevent="submit"><NFormItem label="FFmpeg 可执行文件" label-for="ffmpeg-path"><div class="native-path-field"><NInput :input-props="{ id: 'ffmpeg-path', 'aria-label': 'FFmpeg 可执行文件' }" v-model:value="form.ffmpegPath" placeholder="ffmpeg" :disabled="disabled" /><NativePathButton kind="ffmpeg" label="选择FFmpeg 可执行文件" :disabled="disabled" @select="form.ffmpegPath = $event" /></div></NFormItem><NFormItem label="ffprobe 可执行文件" label-for="ffprobe-path"><div class="native-path-field"><NInput :input-props="{ id: 'ffprobe-path', 'aria-label': 'ffprobe 可执行文件' }" v-model:value="form.ffprobePath" placeholder="ffprobe" :disabled="disabled" /><NativePathButton kind="ffprobe" label="选择ffprobe 可执行文件" :disabled="disabled" @select="form.ffprobePath = $event" /></div></NFormItem><NFormItem label="字幕字体文件（可选，绝对路径）" label-for="subtitle-font-path"><div class="native-path-field"><NInput :input-props="{ id: 'subtitle-font-path', 'aria-label': '字幕字体文件' }" v-model:value="form.subtitleFontPath" placeholder="例如 /path/to/NotoSansCJK-Regular.ttc" :disabled="disabled" /><NativePathButton kind="font" label="选择字幕字体文件" :disabled="disabled" @select="form.subtitleFontPath = $event" /></div></NFormItem><p class="form-note">留空使用系统字体。中文与其他字符覆盖取决于选定字体，请在导出后检查；修改此设置不会发起模型请求。</p><NButton type="primary" attr-type="submit" :loading="saving" :disabled="disabled || !form.ffmpegPath.trim() || !form.ffprobePath.trim()">保存并检测</NButton></NForm><div v-if="health" class="tool-results"><article v-for="tool in [{ name: 'FFmpeg', value: health.ffmpeg }, { name: 'ffprobe', value: health.ffprobe }]" :key="tool.name" class="tool-result"><div class="heading-line"><span class="status-dot" :class="{ unavailable: !tool.value.available }"></span><strong>{{ tool.name }}</strong><span class="muted small">{{ tool.value.available ? '可用' : '不可用' }}</span></div><code>{{ tool.value.path }}</code><p v-if="tool.value.version" class="small muted">{{ tool.value.version }}</p><NAlert v-if="tool.value.error" type="error" :show-icon="false">{{ tool.value.error }}</NAlert></article></div></section><section class="panel settings-card storage-card"><div class="panel-heading"><h2>本机工作区</h2><AppIcon name="projects" :size="20" /></div><p class="settings-description">素材复制到项目受管目录，项目与任务记录存储在本地。</p><dl v-if="health" class="detail-list"><div><dt>应用版本</dt><dd>{{ health.version }}</dd></div><div><dt>数据结构版本</dt><dd>{{ health.schemaVersion }}</dd></div><div><dt>应用数据</dt><dd><code>{{ health.dataDir }}</code></dd></div><div><dt>项目目录</dt><dd><code>{{ health.projectsDir }}</code></dd></div></dl><p class="panel-footnote">备份与恢复步骤见仓库文档。需要切换数据目录时，请先停止服务并通过启动配置设置。</p><div class="local-note"><span class="status-dot"></span><p>你的素材与成片<br /><strong>由你自己保管。</strong></p></div></section></div><OpenAISettings :connections="openaiConnections" :loading="openaiLoading" :saving="openaiSaving" :saved-revision="openaiSavedRevision" :error="openaiError" :disabled="disabled" @save="emit('saveOpenai', $event)" @refresh="emit('refreshOpenai')" @clear-error="emit('clearOpenaiError')" /><ProviderSettings :providers="providers" :saved-revision="providerSavedRevision" :disabled="disabled" @save="emit('saveProvider', $event)" @refresh="emit('refreshProviders')" /><RuntimeSettings :runtimes="runtimes" :disabled="disabled" @save="emit('saveRuntime', $event)" @refresh="emit('refreshRuntimes')" /></div>
+  <div class="settings-view readable-view">
+    <header class="page-heading">
+      <div><p class="eyebrow">YOUR LOCAL STUDIO</p><h1>工作台设置</h1><p class="subheading">按模块管理媒体工具、模型连接与本机工作区。</p></div>
+    </header>
+    <NTabs v-model:value="tab" type="line" class="settings-tabs" :pane-style="{ paddingTop: '24px' }" aria-label="设置模块" role="tablist">
+      <NTabPane name="media" tab="媒体工具" :tab-props="tabProps('media')" id="settings-panel-media" role="tabpanel" aria-labelledby="settings-tab-media" display-directive="show">
+        <MediaSettings :settings="settings" :health="health" :disabled="disabled" :saving="saving" :checking="checking" @save="emit('save', $event)" @check="emit('check')" />
+      </NTabPane>
+      <NTabPane name="openai" tab="OpenAI" :tab-props="tabProps('openai')" id="settings-panel-openai" role="tabpanel" aria-labelledby="settings-tab-openai" display-directive="show">
+        <OpenAISettings :connections="openaiConnections" :loading="openaiLoading" :saving="openaiSaving" :saved-revision="openaiSavedRevision" :error="openaiError" :disabled="disabled" @save="emit('saveOpenai', $event)" @refresh="emit('refreshOpenai')" @clear-error="emit('clearOpenaiError')" />
+      </NTabPane>
+      <NTabPane name="providers" tab="其他模型连接" :tab-props="tabProps('providers')" id="settings-panel-providers" role="tabpanel" aria-labelledby="settings-tab-providers" display-directive="show">
+        <ProviderSettings :providers="providers" :saved-revision="providerSavedRevision" :disabled="disabled" @save="emit('saveProvider', $event)" @refresh="emit('refreshProviders')" />
+      </NTabPane>
+      <NTabPane name="runtimes" tab="本机 CLI" :tab-props="tabProps('runtimes')" id="settings-panel-runtimes" role="tabpanel" aria-labelledby="settings-tab-runtimes" display-directive="show">
+        <RuntimeSettings :runtimes="runtimes" :disabled="disabled" @save="emit('saveRuntime', $event)" @refresh="emit('refreshRuntimes')" />
+      </NTabPane>
+      <NTabPane name="workspace" tab="本机工作区" :tab-props="tabProps('workspace')" id="settings-panel-workspace" role="tabpanel" aria-labelledby="settings-tab-workspace" display-directive="show">
+        <WorkspaceSettings :health="health" :disabled="disabled" :desktop-available="desktopAvailable" :desktop-info="desktopInfo" :desktop-loading="desktopLoading" :desktop-error="desktopError" @refresh-desktop="emit('refreshDesktop')" />
+      </NTabPane>
+    </NTabs>
+  </div>
 </template>

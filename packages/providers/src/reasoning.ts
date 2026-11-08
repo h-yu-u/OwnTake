@@ -39,7 +39,8 @@ export async function callReasoning(value: ProviderProfile, key: string, rawInpu
   });
   const response = object(await postJsonOnce(profile, key, '/chat/completions', {
     model: profile.model, messages: [{ role: 'system', content: directorInstruction }, { role: 'user', content: JSON.stringify({ brief: input.brief, shots }) }],
-    max_completion_tokens: profile.maxOutputTokens, stream: false, n: 1, store: false, tool_choice: 'none',
+    // The API rejects tool_choice without tools, including the value "none".
+    max_completion_tokens: profile.maxOutputTokens, stream: false, n: 1, store: false,
     response_format: { type: 'json_schema', json_schema: { name: 'owntake_storyboard_draft', strict: true, schema: draftResponseSchema } },
   }, rawInput.signal));
   if (!Array.isArray(response.choices) || response.choices.length !== 1) throw invalidResponse();

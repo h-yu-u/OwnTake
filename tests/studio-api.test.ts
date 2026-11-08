@@ -45,7 +45,7 @@ async function harness(t: TestContext) {
   let app: Application | undefined;
   let audio = Buffer.alloc(0), image = Buffer.alloc(0), video = Buffer.alloc(0);
   const state = {
-    speechPosts: 0, reviewPosts: 0, reasoningPosts: 0, imagePosts: 0, dropNextSpeech: false, holdNextReview: false,
+    speechPosts: 0, reviewPosts: 0, reasoningPosts: 0, imagePosts: 0, dropNextSpeech: false, dropNextReview: false, holdNextReview: false,
     reviewRequests: [] as Record<string, any>[], releaseReview: undefined as (() => void) | undefined,
     handlerErrors: [] as string[],
   };
@@ -65,6 +65,7 @@ async function harness(t: TestContext) {
       if (request.url === '/v1/chat/completions') {
         if (body.response_format.json_schema.name === 'owntake_frame_review_v1') {
           state.reviewPosts += 1; state.reviewRequests.push(body);
+          if (state.dropNextReview) { state.dropNextReview = false; response.destroy(); return; }
           const finish = (): void => reply(response, { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ summary: '所给抽样帧未发现指定构图问题。', sampledVerdict: 'pass', issues: [], uncertainties: ['无法据此判断连续动作或声音。'] }) } }] });
           if (state.holdNextReview) { state.holdNextReview = false; state.releaseReview = finish; } else finish();
         } else {
@@ -277,4 +278,145 @@ test('reasoning, generation and concurrent studio operations share one atomic pr
   }
   assert.equal((await h.api<StudioOperation[]>(collection)).length, 1);
   assert.equal(h.app.board.getShot(shot.id).selectedArtifactId, null);
+});
+
+test('frame reviews omit reservations, keep old exposure and deduplicate unknown outcomes across restart', { timeout: 60000 }, async t => {
+  const h = await harness(t), project = await h.createProject(), shot = await h.createShot(project.id), artifact = await h.importVideo(project.id);
+  const candidate = await h.api<Candidate>(`/api/shots/${shot.id}/candidates`, 'POST', { artifactId: artifact.id }, 201);
+  const reviewer = await h.provider('chat-completions', true), collection = `/api/projects/${project.id}/studio-operations`;
+  h.state.dropNextReview = true;
+  const legacy = await h.api<StudioOperation>(collection, 'POST', h.intent(reviewer, 'frame_review', { candidateId: candidate.id }, 'legacy-review', 0.1), 202);
+  assert.equal((await h.terminal(project.id, legacy.id)).status, 'submission_unknown');
+  const input: StudioCreateRequest = { kind: 'frame_review', targetId: reviewer.id, expectedTargetUpdatedAt: reviewer.updatedAt, clientRequestId: 'review-without-reserve', input: { candidateId: candidate.id } };
+  const created = await h.api<StudioOperation>(collection, 'POST', input, 202);
+  const completed = await h.terminal(project.id, created.id);
+  assert.equal(completed.status, 'succeeded', JSON.stringify(completed.error));
+  assert.equal(completed.budgetMode, 'none'); assert.equal(completed.reservedAmount, 0); assert.equal(completed.actualAmount, null);
+  assert.equal(h.app.studio.get(created.id).reservation, null);
+  assert.equal(completed.source.sha256, artifact.sha256); assert.equal(completed.review!.frames.length, 3);
+  assert.equal(h.app.providers.exposure(project.id, 'USD'), 0.1);
+  const session = await fetch(h.app.url + '/api/session');
+  const noCsrf = await fetch(h.app.url + collection, { method: 'POST', headers: { Cookie: session.headers.get('set-cookie')!.split(';')[0]!, 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+  assert.equal(noCsrf.status, 403);
+  const otherShot = await h.createShot(project.id);
+  const other = await h.api<Candidate>(`/api/shots/${otherShot.id}/candidates`, 'POST', { artifactId: artifact.id }, 201);
+  await h.api(collection, 'POST', { ...input, input: { candidateId: other.id } }, 409);
+  await h.restart();
+  const duplicate = await h.api<StudioOperation>(collection, 'POST', input, 202);
+  assert.equal(duplicate.id, created.id); assert.deepEqual(duplicate.review, completed.review); assert.equal(h.state.reviewPosts, 2);
+  h.state.dropNextReview = true;
+  const lostInput = { ...input, clientRequestId: 'review-lost' };
+  const lost = await h.api<StudioOperation>(collection, 'POST', lostInput, 202);
+  assert.equal((await h.terminal(project.id, lost.id)).status, 'submission_unknown');
+  await h.restart();
+  const queried = await h.api<StudioOperation>(collection, 'POST', lostInput, 202);
+  assert.equal(queried.id, lost.id); assert.equal(queried.status, 'submission_unknown'); assert.equal(queried.actualAmount, null);
+  assert.equal(h.state.reviewPosts, 3); assert.equal(h.app.providers.exposure(project.id, 'USD'), 0.1);
+  assert.equal(h.app.studio.get(legacy.id).reservedAmount, 0.1);
+  const board = await h.api<BoardSnapshot>(`/api/projects/${project.id}/storyboard`);
+  assert.equal(board.shots[0]!.selectedArtifactId, null); assert.deepEqual(board.candidates[0], candidate);
+});
+
+test('single speech previews omit reservations, reuse local intents and preserve unknown supplier outcomes', { timeout: 60000 }, async t => {
+  const h = await harness(t), project = await h.createProject(), provider = await h.provider('openai-speech');
+  const collection = `/api/projects/${project.id}/studio-operations`;
+  const input: StudioCreateRequest = { kind: 'tts', targetId: provider.id, expectedTargetUpdatedAt: provider.updatedAt, clientRequestId: 'audition-once', input: speech };
+  const created = await h.api<StudioOperation>(collection, 'POST', input, 202);
+  const completed = await h.terminal(project.id, created.id);
+  assert.equal(completed.status, 'succeeded', JSON.stringify(completed.error));
+  assert.equal(completed.budgetMode, 'none'); assert.equal(completed.reservedAmount, 0); assert.equal(completed.actualAmount, null);
+  assert.equal(h.app.studio.get(created.id).reservation, null);
+  assert.equal(h.app.providers.exposure(project.id, 'USD'), 0);
+  assert.deepEqual(await readFile(h.app.store.resolveArtifactPath(completed.artifactId!)), h.audio);
+  await h.restart();
+  const duplicate = await h.api<StudioOperation>(collection, 'POST', input, 202);
+  assert.equal(duplicate.id, created.id); assert.equal(duplicate.artifactId, completed.artifactId); assert.equal(h.state.speechPosts, 1);
+  await h.api(collection, 'POST', { ...input, input: { ...speech, speed: 1.5 } }, 409);
+  h.state.dropNextSpeech = true;
+  const lostInput = { ...input, clientRequestId: 'audition-lost' };
+  const lost = await h.api<StudioOperation>(collection, 'POST', lostInput, 202);
+  assert.equal((await h.terminal(project.id, lost.id)).status, 'submission_unknown');
+  await h.restart();
+  const queried = await h.api<StudioOperation>(collection, 'POST', lostInput, 202);
+  assert.equal(queried.id, lost.id); assert.equal(queried.status, 'submission_unknown');
+  assert.equal(queried.actualAmount, null); assert.equal(h.state.speechPosts, 2);
+  assert.equal(h.app.store.listArtifacts(project.id).length, 1);
+});
+
+test('batch speech validates the entire batch before registration and deduplicates persisted results across restart', { timeout: 60000 }, async t => {
+  const h = await harness(t), project = await h.createProject();
+  const a = await h.createShot(project.id), b = await h.createShot(project.id), provider = await h.provider('openai-speech');
+  const board = await h.api<BoardSnapshot>(`/api/projects/${project.id}/storyboard`);
+  const input = { clientRequestId: 'batch-once', targetId: provider.id, expectedTargetUpdatedAt: provider.updatedAt, expectedBoardRevision: board.revision, voice: speech.voice, speed: 1, instructions: null, entries: [a, b].map(shot => ({ shotId: shot.id, expectedShotRevision: shot.revision, text: shot.caption })) };
+  const path = `/api/projects/${project.id}/speech-batches`;
+  await h.api(path, 'POST', { ...input, entries: [input.entries[0], { ...input.entries[1], text: '' }] }, 400);
+  assert.equal((await h.api<StudioOperation[]>(`/api/projects/${project.id}/studio-operations`)).length, 0);
+  assert.equal(h.state.speechPosts, 0);
+  await h.api(path, 'POST', { ...input, expectedBoardRevision: board.revision - 1 }, 409);
+  await h.api(path, 'POST', { ...input, entries: [input.entries[0], input.entries[0]] }, 400);
+  const foreignProject = await h.createProject(), foreign = await h.createShot(foreignProject.id);
+  await h.api(path, 'POST', { ...input, entries: [{ shotId: foreign.id, expectedShotRevision: foreign.revision, text: 'foreign' }] }, 409);
+  h.app.store.db.exec(`CREATE TRIGGER fail_second_speech BEFORE INSERT ON studio_operations WHEN json_extract(NEW.body_json, '$.speechBatch.index')=1 BEGIN SELECT RAISE(ABORT,'fixture atomic failure'); END`);
+  await h.api(path, 'POST', input, 500);
+  assert.equal(h.app.studio.list(project.id).length, 0); assert.equal(h.app.store.listJobs(project.id).length, 0); assert.equal(h.state.speechPosts, 0);
+  h.app.store.db.exec('DROP TRIGGER fail_second_speech');
+  const results = await h.api<StudioOperation[]>(path, 'POST', input, 202);
+  const duplicate = await h.api<StudioOperation[]>(path, 'POST', input, 202);
+  assert.deepEqual(duplicate.map(result => result.id), results.map(result => result.id));
+  await h.api(path, 'POST', { ...input, entries: [{ ...input.entries[0], text: 'changed' }, input.entries[1]] }, 409);
+  await h.api(path, 'POST', { ...input, clientRequestId: 'other-batch' }, 409);
+  for (const result of results) {
+    const completed = await h.terminal(project.id, result.id);
+    assert.equal(completed.status, 'succeeded', JSON.stringify(completed.error));
+    assert.equal(completed.speechBatch?.id, input.clientRequestId); assert.equal(completed.budgetMode, 'none');
+    assert.equal(completed.reservedAmount, 0); assert.equal(completed.actualAmount, null);
+    const asset = h.app.store.getArtifact(completed.artifactId!);
+    assert.equal(asset.metadata.shotId, completed.source.shotId); assert.equal(asset.metadata.speechBatchId, input.clientRequestId);
+    assert.equal(h.app.studio.get(result.id).reservation, null);
+  }
+  assert.equal(h.state.speechPosts, 2);
+  await h.restart();
+  const recovered = await h.api<StudioOperation[]>(path, 'POST', input, 202);
+  assert(recovered.every(result => result.status === 'succeeded'));
+  assert.equal(h.state.speechPosts, 2);
+});
+
+test('lost speech responses stop remaining batch requests and remain unknown after restart without resubmission', { timeout: 60000 }, async t => {
+  const h = await harness(t), project = await h.createProject();
+  const a = await h.createShot(project.id), b = await h.createShot(project.id), provider = await h.provider('openai-speech');
+  const board = await h.api<BoardSnapshot>(`/api/projects/${project.id}/storyboard`);
+  h.state.dropNextSpeech = true;
+  const input = { clientRequestId: 'batch-lost', targetId: provider.id, expectedTargetUpdatedAt: provider.updatedAt, expectedBoardRevision: board.revision, voice: speech.voice, speed: 1, instructions: null, entries: [a, b].map(shot => ({ shotId: shot.id, expectedShotRevision: shot.revision, text: shot.caption })) };
+  const path = `/api/projects/${project.id}/speech-batches`;
+  const results = await h.api<StudioOperation[]>(path, 'POST', input, 202);
+  assert.equal((await h.terminal(project.id, results[0]!.id)).status, 'submission_unknown');
+  const stopped = await h.terminal(project.id, results[1]!.id);
+  assert.equal(stopped.status, 'cancelled'); assert.equal(stopped.error?.code, 'BATCH_STOPPED');
+  assert.equal(stopped.actualAmount, 0); assert.equal(h.state.speechPosts, 1);
+  await h.restart();
+  await h.api(path, 'POST', input, 202);
+  await h.api(path, 'POST', { ...input, clientRequestId: 'unsafe-replay' }, 409);
+  assert.equal(h.state.speechPosts, 1);
+  assert.equal((await h.operation(project.id, results[0]!.id)).status, 'submission_unknown');
+});
+
+test('queued batch segments survive restart and stop-before-submit cancellation creates no speech calls', { timeout: 60000 }, async t => {
+  const h = await harness(t), project = await h.createProject();
+  const a = await h.createShot(project.id), b = await h.createShot(project.id), provider = await h.provider('openai-speech');
+  await h.app.studioRunner.stop();
+  const board = await h.api<BoardSnapshot>(`/api/projects/${project.id}/storyboard`);
+  const input = { clientRequestId: 'batch-cancel', targetId: provider.id, expectedTargetUpdatedAt: provider.updatedAt, expectedBoardRevision: board.revision, voice: speech.voice, speed: 1, instructions: null, entries: [a, b].map(shot => ({ shotId: shot.id, expectedShotRevision: shot.revision, text: shot.caption })) };
+  const path = `/api/projects/${project.id}/speech-batches`;
+  const pending = await h.api<StudioOperation[]>(path, 'POST', input, 202);
+  assert(pending.every(result => result.status === 'queued'));
+  const cancelled = await h.api<StudioOperation[]>(`${path}/batch-cancel/cancel`, 'POST', {});
+  assert(cancelled.every(result => result.status === 'cancelled' && result.actualAmount === 0));
+  assert.equal(h.state.speechPosts, 0);
+  await h.api(`/api/projects/${(await h.createProject()).id}/speech-batches/batch-cancel/cancel`, 'POST', {}, 404);
+  const queued = await h.api<StudioOperation[]>(path, 'POST', { ...input, clientRequestId: 'batch-restart' }, 202);
+  assert(queued.every(result => result.status === 'queued'));
+  await h.restart();
+  for (const result of queued) assert.equal((await h.terminal(project.id, result.id)).status, 'succeeded');
+  assert.equal(h.state.speechPosts, 2);
+  assert((await h.api<StudioOperation[]>(`${path}/batch-restart/cancel`, 'POST', {})).every(result => result.status === 'succeeded'));
 });

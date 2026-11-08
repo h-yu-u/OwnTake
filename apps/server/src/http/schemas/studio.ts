@@ -21,7 +21,7 @@ const RequestFields = {
   targetId: ResourceId,
   expectedTargetUpdatedAt: Type.String({ maxLength: 100 }),
   clientRequestId: ResourceId,
-  reservation: Reservation,
+  reservation: Type.Optional(Reservation),
 };
 
 export const SpeechInput = Type.Object({
@@ -39,3 +39,12 @@ export const StudioCreate = Type.Union([
     input: Type.Object({ expectedBoardRevision: Revision, expectedProjectRevision: ExistingRevision }, { additionalProperties: false }),
   }, { additionalProperties: false }),
 ]);
+
+export const BatchSpeechCreate = Type.Object({
+  clientRequestId: ResourceId, targetId: ResourceId,
+  expectedTargetUpdatedAt: Type.String({ maxLength: 100 }), expectedBoardRevision: Revision,
+  voice: Type.String({ maxLength: 128 }), speed: Type.Number(), instructions: Type.Union([Type.String({ maxLength: 4096 }), Type.Null()]),
+  entries: Type.Array(Type.Object({ shotId: ResourceId, expectedShotRevision: ExistingRevision, text: Type.String({ maxLength: 10000 }) }, { additionalProperties: false }), { minItems: 1, maxItems: 100 }),
+}, { additionalProperties: false });
+
+export const SpeechBatchParams = Type.Object({ id: ResourceId, batchId: ResourceId }, { additionalProperties: false });

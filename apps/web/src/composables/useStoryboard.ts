@@ -5,7 +5,7 @@ import { ApiRequestError, errorMessage } from '../lib/api.ts';
 import { activeShots, emptyShotFields, shotFields, shotProblems } from '../lib/storyboard.ts';
 import { storyboardApi } from '../lib/storyboardApi.ts';
 import { providerApi } from '../lib/providerApi.ts';
-import type { ProviderInput } from '../lib/providerApi.ts';
+import type { ProviderInput, ReasoningRequest } from '../lib/providerApi.ts';
 
 export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
   const board = ref<BoardSnapshot | null>(null);
@@ -127,12 +127,11 @@ export function useStoryboard(project: Ref<ProjectSnapshot | null>) {
       }
     });
   }
-  async function requestReasoning(providerId: string, reservation: Reservation, clientRequestId: string, expectedProviderUpdatedAt: string) {
+  async function requestReasoning(input: ReasoningRequest) {
     if (!board.value) return;
     const current = board.value;
-    const expectedProjectRevision = project.value!.project.revision;
     return mutate(async () => {
-      const call = await providerApi.reason(current.projectId, { providerId, clientRequestId, expectedBoardRevision: current.revision, expectedProjectRevision, expectedProviderUpdatedAt, reservation });
+      const call = await providerApi.reason(current.projectId, input);
       calls.value = [call, ...calls.value.filter(item => item.id !== call.id)];
       return call;
     });

@@ -1,0 +1,106 @@
+/* One bounded workspace; lists own their scrolling instead of growing the page. */
+.workbench-view { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; }
+.workbench-view > .page-heading { flex-shrink: 0; margin: 0; gap: 14px; }
+.workbench-view > .page-heading h1 { font-size: 23px; }
+.workbench-view .workbench-alert { flex-shrink: 0; }
+.workbench-library-toggle.n-button { display: none; }
+.workbench-layout { display: grid; grid-template-columns: 235px minmax(0, 1fr); gap: 16px; min-height: 0; flex: 1; }
+.workbench-view .asset-panel { display: flex; flex-direction: column; min-height: 0; max-height: 100%; overflow: hidden; padding: 16px; }
+.workbench-view .asset-panel > .panel-heading, .workbench-view .asset-panel > .n-button { flex-shrink: 0; }
+.workbench-view .asset-list { display: flex; flex-direction: column; flex: 1; min-height: 0; max-height: none; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.workbench-view .asset-item { flex-shrink: 0; }
+.workbench-view .asset-empty { flex: 1; min-height: 0; }
+.workbench-view .asset-hint { display: block; margin: 10px 0; }
+.workbench-main { display: grid; grid-template-rows: minmax(0, .65fr) minmax(0, 1fr); gap: 14px; min-height: 0; min-width: 0; }
+.workbench-view .preview-panel { display: flex; flex-direction: column; padding: 14px 16px; min-height: 0; overflow: hidden; }
+.workbench-view .preview-panel > .panel-heading { margin-bottom: 8px; flex-shrink: 0; }
+.workbench-view .preview-panel .media-preview { flex: 1; height: auto; min-height: 0; max-height: 100%; }
+.workbench-view .preview-panel .media-info { flex-shrink: 0; margin-top: 6px; }
+.workbench-view .preview-actions { flex-shrink: 0; margin-top: 7px; padding-top: 7px; }
+.workbench-view .preview-actions .n-button { height: 28px; font-size: 11px; }
+.workbench-view .preview-actions > span { font-size: 10px; }
+.workbench-view .audio-preview { gap: 8px; padding: 10px; }
+.workbench-view .audio-preview > svg { display: none; }
+.workbench-view .preview-placeholder { padding: 10px; gap: 6px; }
+.workbench-view .preview-placeholder > svg { width: 24px; height: 24px; }
+.workbench-editing { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.workbench-tabbar { display: flex; flex-shrink: 0; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
+.workbench-tabbar > button { display: flex; align-items: center; gap: 9px; min-height: 43px; padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.workbench-tabbar > button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.workbench-tabbar > button > span { font-size: 10px; color: var(--faint); }
+.workbench-editor-panel { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.workbench-view .editor-module { display: flex; flex-direction: column; width: 100%; min-height: 0; max-height: 100%; padding: 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
+.workbench-view .editor-module > .panel-heading { margin-bottom: 9px; flex-shrink: 0; }
+.workbench-view .editor-module > .panel-heading h2 { font-size: 12px; }
+.workbench-view .editor-module > .panel-heading .n-button { height: 28px; font-size: 11px; }
+.workbench-view .editor-module > .panel-footnote { flex-shrink: 0; margin-top: 8px; font-size: 10px; line-height: 1.5; }
+.workbench-view .timeline-ruler { flex-shrink: 0; margin: 0 0 4px; }
+.workbench-view .timeline-strip { flex-shrink: 0; min-height: 0; height: 63px; max-height: 63px; margin-bottom: 9px; overscroll-behavior-x: contain; }
+.workbench-view .timeline-segment { min-width: 100px; padding: 4px 8px; gap: 0; }
+.editor-split-panel { display: grid; grid-template-columns: minmax(150px, 25%) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 90px; overflow: hidden; }
+.editor-item-list, .editor-item-inspector { min-height: 0; min-width: 0; max-height: 100%; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.editor-item-list { display: flex; flex-direction: column; gap: 5px; padding: 1px 4px 1px 1px; position: relative; }
+.editor-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px; width: 100%; flex-shrink: 0; background: var(--field); border: 1px solid var(--line-soft); border-radius: 7px; text-align: left; }
+.editor-item.selected { border-color: #8a7044; background: #302e21; }
+.editor-item-number { font-size: 10px; color: var(--accent); padding-top: 1px; }
+.editor-item-copy { display: grid; gap: 5px; min-width: 0; }
+.editor-item-copy > strong { font-weight: 500; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-item-copy > small { color: var(--muted); font-size: 10px; }
+.workbench-view .editor-item-inspector > article { margin: 0; padding: 12px; }
+.workbench-view .editor-item-inspector .clip-topline > strong { min-width: 0; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.workbench-view .clip-fields { grid-template-columns: 1fr 1fr; gap: 12px; }
+.workbench-view .caption-timing-fields, .workbench-view .caption-style-fields, .workbench-view .audio-timing-fields, .workbench-view .audio-mix-fields { margin-top: 12px; gap: 10px; }
+.workbench-view .audio-track-adder { margin-bottom: 6px; flex-shrink: 0; }
+.workbench-view .batch-audio-entry { align-self: flex-end; margin: 0 0 9px; flex-shrink: 0; font-size: 11px; height: 28px; }
+.workbench-view .track-source-player { height: 32px; }
+.workbench-save-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; flex-shrink: 0; border-top: 1px solid var(--line-soft); background: #20271b; }
+.workbench-save-bar > span { color: var(--muted); font-size: 11px; }
+.workbench-save-bar > span.has-changes { color: var(--accent); }
+.workbench-save-bar small { display: block; font-size: 10px; color: var(--faint); }
+.workbench-save-bar > .n-button { height: 30px; font-size: 12px; }
+@media (min-width: 761px) {
+  .app-shell:has(.workbench-view) { height: 100dvh; min-height: 0; grid-template-rows: 68px minmax(0, 1fr); }
+  .app-shell:has(.workbench-view) > .global-nav { min-height: 0; overflow-y: auto; }
+  .app-shell:has(.workbench-view) > main { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .workbench-view { flex: 1; max-height: 100%; overflow: hidden; }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  .workbench-layout { grid-template-columns: 195px minmax(0, 1fr); gap: 12px; }
+  .editor-split-panel { grid-template-columns: 145px minmax(0, 1fr); }
+  .workbench-tabbar { padding: 0 8px; }
+  .workbench-tabbar > button { padding: 8px 10px; }
+  .workbench-view > .page-heading .subheading { display: none; }
+}
+@media (max-width: 760px) {
+  .workbench-view { max-height: none; gap: 12px; }
+  .workbench-view > .page-heading { flex-direction: column; align-items: stretch; gap: 10px; }
+  .workbench-view > .page-heading .subheading { display: none; }
+  .workbench-view > .page-heading h1 { font-size: 21px; }
+  .workbench-view > .page-heading .heading-actions { flex-wrap: wrap; gap: 8px; }
+  .workbench-view > .page-heading .n-tag { display: none; }
+  .workbench-library-toggle.n-button { display: inline-flex; }
+  .workbench-layout { display: flex; flex-direction: column; gap: 12px; }
+  .workbench-view .asset-panel { display: none; height: 280px; max-height: 40dvh; }
+  .workbench-view .asset-panel.library-expanded { display: flex; }
+  .workbench-main { grid-template-rows: 235px min(72dvh, 620px); }
+  .workbench-view .preview-panel { padding: 12px; }
+  .workbench-view .preview-actions > span { display: none; }
+  .workbench-view .preview-actions { justify-content: flex-end; }
+  .workbench-view .media-info > span { display: none; }
+  .workbench-tabbar { padding: 0 5px; justify-content: space-between; }
+  .workbench-tabbar > button { padding: 8px 7px; font-size: 11px; gap: 6px; }
+  .workbench-view .editor-module { padding: 10px; }
+  .workbench-view .editor-module > .panel-heading { flex-wrap: wrap; gap: 7px; }
+  .workbench-view .editor-module > .panel-heading > .heading-line .small { font-size: 10px; }
+  .editor-split-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(75px, 30%) minmax(0, 1fr); gap: 9px; }
+  .workbench-view .clip-fields, .workbench-view .caption-style-fields, .workbench-view .caption-timing-fields, .workbench-view .audio-timing-fields, .workbench-view .audio-mix-fields { grid-template-columns: 1fr 1fr; }
+  .workbench-view .editor-module > .panel-footnote { max-height: 38px; overflow-y: auto; }
+  .workbench-save-bar { position: sticky; bottom: 0; z-index: 2; }
+}
+
+.workbench-view .timeline-inspector { flex: 1; min-height: 0; max-height: 100%; overflow: auto; overscroll-behavior: contain; }
+.workbench-view .timeline-inspector > article { margin: 0; }
+.workbench-view .timeline-inspector .clip-topline > strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; min-width: 0; }
+@media (min-width: 1101px) {
+  .workbench-view .timeline-inspector .clip-fields { grid-template-columns: 1fr 1fr minmax(150px, 1.5fr) 90px; }
+}

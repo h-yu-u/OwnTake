@@ -15,7 +15,8 @@ export function useStories() {
     loading.value = true;
     try {
       stories.value = await storyApi.list(q);
-      if (selected.value) selected.value = stories.value.find(item => item.id === selected.value?.id) ?? null;
+      // Filtering the index must not turn an open story into an unsaved new story.
+      if (selected.value) selected.value = stories.value.find(item => item.id === selected.value?.id) ?? selected.value;
     } finally { loading.value = false; }
   }
   async function choose(id: string): Promise<void> {

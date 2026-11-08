@@ -5,7 +5,7 @@ export const studioStatusLabels: Record<StudioStatus, string> = { queued: 'ç­‰å¾
 export function studioTone(status: StudioStatus): 'default' | 'info' | 'success' | 'warning' | 'error' {
   return status === 'succeeded' ? 'success' : status === 'failed' ? 'error' : ['submission_unknown', 'ingest_failed'].includes(status) ? 'warning' : ['queued', 'submitting', 'received'].includes(status) ? 'info' : 'default';
 }
-export function studioCanSettle(record: StudioOperation): boolean { return ['succeeded', 'failed', 'cancelled', 'submission_unknown', 'ingest_failed'].includes(record.status); }
+export function studioCanSettle(record: StudioOperation): boolean { return record.budgetMode !== 'none' && ['succeeded', 'failed', 'cancelled', 'submission_unknown', 'ingest_failed'].includes(record.status); }
 export function studioCanRetryIngest(record: StudioOperation): boolean { return record.status === 'ingest_failed'; }
 export function speechProblems(input: SpeechInput, provider?: ProviderSummary): string[] {
   const capabilities = provider?.capabilities.speech;

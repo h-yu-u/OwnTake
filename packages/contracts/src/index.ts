@@ -1,3 +1,5 @@
+/** Up to 100 per-shot speech segments plus 16 music/effect tracks. */
+export const MAX_AUDIO_TRACKS = 116;
 export type Ratio = '16:9' | '9:16' | '1:1';
 export type MediaKind = 'video' | 'image' | 'audio';
 export interface Project {
@@ -50,7 +52,7 @@ export interface AppEvent {
 export interface ProjectSnapshot {
   project: Project; artifacts: Artifact[]; timeline: Timeline | null; jobs: Job[]; eventCursor: number;
 }
-export interface ToolHealth { available: boolean; path: string; version?: string; error?: string }
+export interface ToolHealth { available: boolean; path: string; version?: string; error?: string; capabilities?: { subtitles: boolean } }
 export interface Health {
   status: 'ok' | 'degraded'; version: string; schemaVersion: number;
   ffmpeg: ToolHealth; ffprobe: ToolHealth; dataDir: string; projectsDir: string;
