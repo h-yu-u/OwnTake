@@ -1,3 +1,4 @@
+import { StoryDiscovery } from '../../../../packages/providers/src/discovery.ts';
 import { StoryRepository } from '../../../../packages/storage/src/story-repository.ts';
 import { Store } from '../../../../packages/storage/src/index.ts';
 import { StoryboardStore } from '../../../../packages/storage/src/storyboard.ts';
@@ -35,6 +36,7 @@ export async function createCore(config: ServerConfig): Promise<CoreRuntime> {
     const context: ApplicationContext = {
       store,
       stories: new StoryRepository(store),
+      discovery: new StoryDiscovery(),
       board,
       providers,
       generations,

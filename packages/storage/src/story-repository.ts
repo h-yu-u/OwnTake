@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AppError, invariant } from '../../contracts/src/errors.ts';
 import type { Ratio } from '../../contracts/src/index.ts';
 import type { ScriptVersion, Story, StoryInput, StoryProjectLink, StoryVersion } from '../../contracts/src/story.ts';
+import { canonicalStoryUrl } from '../../domain/src/story-url.ts';
 import { validateStory } from '../../domain/src/story.ts';
 import { integer, resourceId, text } from '../../domain/src/validation.ts';
 import type { Store } from './store.ts';
@@ -25,6 +26,9 @@ function scriptFrom(row: Row): ScriptVersion {
 export class StoryRepository {
   private readonly store: Store;
   constructor(store: Store) { this.store = store; }
+  private sourceExists(url: string, excludedId = ''): boolean {
+    return Boolean(this.store.db.prepare("SELECT id FROM library_stories WHERE json_extract(source_json,'$.url')=? AND id<>? LIMIT 1").get(url, excludedId));
+  }
   list(query = ''): Story[] {
     const q = text(query, '检索词', 100, true);
     return this.store.db.prepare(`SELECT * FROM library_stories
@@ -48,6 +52,10 @@ export class StoryRepository {
   }
   create(raw: unknown): Story {
     const input = validateStory(raw);
+    if (input.source.url) {
+      input.source.url = canonicalStoryUrl(input.source.url);
+      invariant(!this.sourceExists(input.source.url), 'STORY_ALREADY_SAVED', '该来源已收藏，可在故事库中打开原条目', 409);
+    }
     return this.store.transaction(() => {
       const id = `story_${randomUUID()}`, now = new Date().toISOString();
       this.store.db.prepare('INSERT INTO library_stories VALUES (?,?,?,?,?,?,?,?,?)')
@@ -58,6 +66,10 @@ export class StoryRepository {
   }
   update(id: string, raw: unknown, expectedRevision: number): Story {
     const input = validateStory(raw);
+    if (input.source.url) {
+      input.source.url = canonicalStoryUrl(input.source.url);
+      invariant(!this.sourceExists(input.source.url, id), 'STORY_ALREADY_SAVED', '该来源已被其他故事使用', 409);
+    }
     integer(expectedRevision, '故事版本', 1, Number.MAX_SAFE_INTEGER);
     return this.store.transaction(() => {
       const old = this.get(id);

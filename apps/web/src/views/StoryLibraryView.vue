@@ -3,12 +3,14 @@ import { computed, onMounted, ref } from 'vue';
 import { NAlert, NButton, NInput, NSelect, NTag, useMessage } from 'naive-ui';
 import type { Ratio, StoryInput, StorySource } from '../types.ts';
 import { useStories } from '../composables/useStories.ts';
+import StoryDiscoverPanel from '../components/StoryDiscoverPanel.vue';
 import { storyApi } from '../lib/storyApi.ts';
 import { errorMessage } from '../lib/api.ts';
 
 const emit = defineEmits<{ 'project-created': [id: string] }>();
 const state = useStories(), message = useMessage();
 const query = ref(''), error = ref('');
+const showDiscovery = ref(false);
 const editing = ref(false), textScript = ref(''), ratio = ref<Ratio>('16:9');
 const genre = ref(''), title = ref(''), summary = ref(''), tags = ref(''), beats = ref('');
 const source = ref<StorySource>({ platform: 'original', url: '', title: '', author: '', rights: 'original' });
@@ -66,12 +68,14 @@ async function createProject(): Promise<void> {
     message.success('已从故事创建作品'); emit('project-created', result.project.id);
   } catch (failure) { error.value = errorMessage(failure); }
 }
+async function imported(id: string) { await search(); showDiscovery.value = false; await select(id); }
 onMounted(() => { void search(); });
 </script>
 <template>
   <div class="library-page">
-    <header class="library-heading"><div><p class="eyebrow">STORY LIBRARY · LOCAL FIRST</p><h1>故事库</h1><p>从灵感到结构化剧本，让每个值得拍的故事都能持续打磨。</p></div><NButton type="primary" @click="clearEditor">新建原创故事</NButton></header>
+    <header class="library-heading"><div><p class="eyebrow">STORY LIBRARY · LOCAL FIRST</p><h1>故事库</h1><p>从灵感到结构化剧本，让每个值得拍的故事都能持续打磨。</p></div><div class="library-actions"><NButton @click="showDiscovery = !showDiscovery">{{ showDiscovery ? '收起发现' : '发现故事' }}</NButton><NButton type="primary" @click="clearEditor">新建原创故事</NButton></div></header>
     <NAlert v-if="error" type="error" :show-icon="false" closable @close="error = ''">{{ error }}</NAlert>
+    <StoryDiscoverPanel v-if="showDiscovery" @saved="imported" />
     <div class="library-layout">
       <section class="library-index" aria-label="故事列表">
         <div class="library-search"><NInput v-model:value="query" clearable placeholder="搜索标题、题材、标签或剧情" @keyup.enter="search" /><NButton :loading="state.loading.value" @click="search">检索</NButton></div>
